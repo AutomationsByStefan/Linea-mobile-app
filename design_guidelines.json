@@ -1,0 +1,142 @@
+{
+  "project_context": {
+    "app_type": "mobile_web_app (React Native Expo)",
+    "domain": "Pilates Reformer studio - Linea Pilates",
+    "theme_archetype": "1 (Organic & Earthy) - Light Theme",
+    "design_goal": "Elegant, premium pilates studio aesthetic with warm cream backgrounds and gold accents.",
+    "language": "Bosnian"
+  },
+  "colors": {
+    "background": "#FDFCF8",
+    "primary": "#A68B5B",
+    "primary_hover": "#8B7349",
+    "gradient_primary": "linear-gradient(135deg, #C4A574 0%, #A68B5B 100%)",
+    "text_foreground": "#2C2C2C",
+    "text_muted": "#888888",
+    "border": "rgba(229, 211, 179, 0.5)",
+    "card_background": "#FFFFFF",
+    "secondary": "#F5E6D3",
+    "input_border": "#E8E2D8",
+    "white": "#FFFFFF",
+    "black": "#000000"
+  },
+  "typography": {
+    "headings": {
+      "fontFamily": "Playfair Display",
+      "style": "serif",
+      "usage": "Elegant titles, Hero text, Main Screen headings"
+    },
+    "body": {
+      "fontFamily": "Manrope",
+      "style": "sans-serif",
+      "usage": "Clean, modern body text, labels, buttons"
+    },
+    "sizes": {
+      "h1": 32,
+      "h2": 24,
+      "h3": 20,
+      "body": 16,
+      "small": 14,
+      "tiny": 12
+    }
+  },
+  "components": {
+    "cards": {
+      "backgroundColor": "#FFFFFF",
+      "borderWidth": 1,
+      "borderColor": "rgba(229, 211, 179, 0.5)",
+      "borderRadius": 24,
+      "shadowColor": "rgba(166, 139, 91, 0.1)",
+      "shadowOffset": { "width": 0, "height": 4 },
+      "shadowOpacity": 1,
+      "shadowRadius": 20,
+      "padding": 24,
+      "elevation": 4
+    },
+    "buttons": {
+      "primary": {
+        "backgroundColor": "#A68B5B",
+        "color": "#FFFFFF",
+        "borderRadius": 9999,
+        "height": 48,
+        "justifyContent": "center",
+        "alignItems": "center"
+      },
+      "secondary": {
+        "backgroundColor": "#F5E6D3",
+        "color": "#3E3E3E",
+        "borderRadius": 9999,
+        "height": 48,
+        "justifyContent": "center",
+        "alignItems": "center"
+      },
+      "outline": {
+        "backgroundColor": "transparent",
+        "borderWidth": 2,
+        "borderColor": "#A68B5B",
+        "color": "#A68B5B",
+        "borderRadius": 9999,
+        "height": 48,
+        "justifyContent": "center",
+        "alignItems": "center"
+      }
+    },
+    "inputs": {
+      "borderWidth": 1,
+      "borderColor": "#E8E2D8",
+      "borderRadius": 12,
+      "padding": 16,
+      "backgroundColor": "#FFFFFF",
+      "color": "#2C2C2C"
+    }
+  },
+  "animations": {
+    "fadeIn": "opacity 0 -> 1, translateY 10 -> 0 over 0.5s",
+    "slideUp": "opacity 0 -> 1, translateY 20 -> 0 over 0.5s"
+  },
+  "media": {
+    "logo": {
+      "url": "https://customer-assets.emergentagent.com/job_pilates-hub-12/artifacts/ny62z2sx_linea.png",
+      "description": "Linea Pilates Official Logo"
+    },
+    "hero_backgrounds": [
+      {
+        "url": "https://images.unsplash.com/photo-1754257320350-2c7a997fff15?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA4Mzl8MHwxfHNlYXJjaHwzfHxwaWxhdGVzJTIwcmVmb3JtZXIlMjBzdHVkaW98ZW58MHx8fHwxNzc1NDYyNzY2fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Woman doing pilates in a studio - Hero welcome card"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1754258166816-0075fe0132ce?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA4Mzl8MHwxfHNlYXJjaHwxfHxwaWxhdGVzJTIwcmVmb3JtZXIlMjBzdHVkaW98ZW58MHx8fHwxNzc1NDYyNzY2fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Woman working out at a pilates studio - Hero / Package banner"
+      }
+    ],
+    "avatars": [
+      {
+        "url": "https://images.pexels.com/photos/31500884/pexels-photo-31500884.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Woman fitness portrait for profile screen"
+      }
+    ]
+  },
+  "instructions_to_main_agent": {
+    "framework": "React Native Expo",
+    "styling": "Use StyleSheet or styled-components depending on preference, adhering strictly to the exact colors, fonts, and dimensions provided.",
+    "fonts": "Ensure Playfair Display and Manrope are loaded using expo-font. Headings MUST use Playfair Display (elegant serif), body text and buttons MUST use Manrope (clean sans-serif).",
+    "icons": "Use lucide-react-native or @expo/vector-icons. Prefer elegant, clean, and stroke-based icons.",
+    "testing": "CRITICAL: All interactive and key informational elements MUST include a data-testid attribute (mapped to testID in React Native) in kebab-case. Example: testID='login-button'.",
+    "language": "All text in the app MUST be in Bosnian (e.g., 'Prijava', 'Početna', 'Raspored', 'Profil', 'Paketi').",
+    "screens": [
+      "Login (phone number + country code dropdown)",
+      "PIN entry",
+      "Registration",
+      "Home (welcome hero card, active memberships, upcoming trainings, contact info, feedback modal)",
+      "Schedule (horizontal date strip, time slots grid)",
+      "Packages (package cards and badges)",
+      "Profile (stats, membership status, menu items)",
+      "Training history (upcoming/past tabs)",
+      "Weight tracking (line chart)",
+      "Notifications",
+      "Memberships overview",
+      "Invite deeplink screen"
+    ],
+    "navigation": "Bottom tab navigation including: Home, Schedule, Packages, Profile."
+  }
+}
