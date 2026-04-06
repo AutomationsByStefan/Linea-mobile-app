@@ -1,4 +1,4 @@
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || '';
+const API_BASE = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 type FetchOptions = RequestInit & { timeout?: number };
 

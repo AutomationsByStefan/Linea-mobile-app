@@ -1,59 +1,13 @@
-from fastapi import FastAPI, APIRouter
-from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.responses import Response
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
+import httpx
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field
-from typing import List
-import uuid
-from datetime import datetime
 
+# External API base URL
+EXTERNAL_API = "https://pilates-studio-19.preview.emergentagent.com"
 
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
-
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
-
-# Create the main app without a prefix
 app = FastAPI()
-
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
-
-
-# Define Models
-class StatusCheck(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-class StatusCheckCreate(BaseModel):
-    client_name: str
-
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
-
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.dict()
-    status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.dict())
-    return status_obj
-
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    status_checks = await db.status_checks.find().to_list(1000)
-    return [StatusCheck(**status_check) for status_check in status_checks]
-
-# Include the router in the main app
-app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,13 +17,84 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Persistent HTTP client for connection pooling
+http_client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
+
+
 @app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+async def shutdown():
+    await http_client.aclose()
+
+
+@app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def proxy(request: Request, path: str):
+    """Reverse proxy all /api/* requests to the external Pilates studio API."""
+    url = f"{EXTERNAL_API}/api/{path}"
+
+    # Forward relevant headers
+    fwd_headers = {}
+    for key, value in request.headers.items():
+        lower = key.lower()
+        if lower in ('host', 'connection', 'transfer-encoding', 'content-length'):
+            continue
+        fwd_headers[key] = value
+
+    # Read body
+    body = await request.body()
+
+    # Forward cookies from the browser request
+    cookies = dict(request.cookies)
+
+    try:
+        resp = await http_client.request(
+            method=request.method,
+            url=url,
+            headers=fwd_headers,
+            content=body if body else None,
+            cookies=cookies,
+        )
+    except httpx.RequestError as e:
+        logger.error(f"Proxy error: {e}")
+        return Response(content=f'{{"detail": "Proxy error: {str(e)}"}}', status_code=502,
+                        media_type="application/json")
+
+    # Build response headers - forward Set-Cookie with domain adjustments
+    resp_headers = {}
+    for key, value in resp.headers.multi_items():
+        lower = key.lower()
+        if lower in ('transfer-encoding', 'content-encoding', 'content-length'):
+            continue
+        if lower == 'set-cookie':
+            # Remove domain restriction so cookie works on proxy domain
+            cookie_val = value
+            # Remove Domain=... from cookie
+            import re
+            cookie_val = re.sub(r';\s*[Dd]omain=[^;]*', '', cookie_val)
+            # Ensure SameSite=None and Secure for cross-site
+            if 'SameSite' not in cookie_val:
+                cookie_val += '; SameSite=None; Secure'
+            resp_headers.setdefault('set-cookie', [])
+            if isinstance(resp_headers.get('set-cookie'), list):
+                resp_headers['set-cookie'].append(cookie_val)
+            continue
+        resp_headers[key] = value
+
+    # Build FastAPI Response
+    response = Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        media_type=resp.headers.get('content-type', 'application/json'),
+    )
+
+    # Copy headers
+    for key, value in resp_headers.items():
+        if key == 'set-cookie' and isinstance(value, list):
+            for cookie in value:
+                response.headers.append('set-cookie', cookie)
+        else:
+            response.headers[key] = value
+
+    return response

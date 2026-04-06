@@ -95,18 +95,20 @@ export default function PaketiScreen() {
           const name = pkg.naziv || pkg.name || '';
           const badge = BADGES[name];
           const price = pkg.cijena || pkg.price;
-          const sessions = pkg.broj_termina || pkg.sessions;
+          const sessions = pkg.termini || pkg.broj_termina || pkg.sessions;
           const pkgId = pkg.id || pkg._id || pkg.package_id;
 
           return (
             <View
               key={pkgId}
-              style={[styles.card, badge && styles.cardBadge]}
+              style={[styles.card, (pkg.popular || pkg.best_value || badge) && styles.cardBadge]}
               testID={`package-card-${name.replace(/\s/g, '-').toLowerCase()}`}
             >
-              {badge && (
-                <View style={[styles.badgeTag, { backgroundColor: badge.color }]}>
-                  <Text style={styles.badgeText}>{badge.label}</Text>
+              {(badge || pkg.popular || pkg.best_value) && (
+                <View style={[styles.badgeTag, { backgroundColor: badge?.color || (pkg.popular ? Colors.primary : '#A68B5B') }]}>
+                  <Text style={styles.badgeText}>
+                    {badge?.label || (pkg.popular ? 'Najpopularniji' : 'Najisplativiji')}
+                  </Text>
                 </View>
               )}
               <View style={styles.cardContent}>
