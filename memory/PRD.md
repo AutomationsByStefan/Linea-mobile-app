@@ -5,7 +5,7 @@ Mobile application for "Linea Pilates" Reformer Pilates studio in Trebinje, BiH.
 
 ## Architecture
 - **Frontend**: Expo SDK 54 (React Native) with expo-router file-based navigation
-- **Backend Proxy**: FastAPI (server.py) acts as reverse proxy to external API at `https://pilates-studio-19.preview.emergentagent.com`
+- **Backend Proxy**: FastAPI (server.py) acts as reverse proxy to external API at `https://linea-pilates-reformer-production.up.railway.app`
 - **External API**: Existing Pilates studio backend providing all business logic and data
 - **Auth**: Phone + PIN session-based authentication (cookies proxied through backend)
 
@@ -39,7 +39,7 @@ Mobile application for "Linea Pilates" Reformer Pilates studio in Trebinje, BiH.
 - `backend/server.py` - Reverse proxy to external API
 
 ## External API Base
-`https://pilates-studio-19.preview.emergentagent.com/api`
+`https://linea-pilates-reformer-production.up.railway.app/api`
 
 ## Notes
 - Google login deferred to v2

@@ -5,7 +5,7 @@ import httpx
 import logging
 
 # External API base URL
-EXTERNAL_API = "https://pilates-studio-19.preview.emergentagent.com"
+EXTERNAL_API = "https://linea-pilates-reformer-production.up.railway.app"
 
 app = FastAPI()
 
