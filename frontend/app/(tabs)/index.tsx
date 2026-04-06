@@ -84,7 +84,7 @@ export default function HomeScreen() {
         <View style={styles.heroCard} testID="home-hero-card">
           <View style={styles.heroTop}>
             <View style={styles.heroTextWrap}>
-              <Text style={styles.heroTitle}>Zdravo, {user?.ime || 'Korisnik'}</Text>
+              <Text style={styles.heroTitle}>Zdravo, {user?.name || user?.ime || 'Korisnik'}</Text>
               <Text style={styles.heroSubtitle}>Vrijeme je da rezervišeš naredni trening?</Text>
             </View>
             <TouchableOpacity

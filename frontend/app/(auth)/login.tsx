@@ -39,7 +39,7 @@ export default function LoginScreen() {
     try {
       const res = await authAPI.checkPhone(full);
       if (res.exists) {
-        setUserName(res.ime || res.name || 'Korisnik');
+        setUserName(res.name || res.ime || 'Korisnik');
         setStep('pin');
       } else {
         router.push({ pathname: '/(auth)/register', params: { phone: full } });

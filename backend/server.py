@@ -38,7 +38,8 @@ async def proxy(request: Request, path: str):
     fwd_headers = {}
     for key, value in request.headers.items():
         lower = key.lower()
-        if lower in ('host', 'connection', 'transfer-encoding', 'content-length'):
+        # Skip hop-by-hop headers and cookie (forwarded separately)
+        if lower in ('host', 'connection', 'transfer-encoding', 'content-length', 'cookie'):
             continue
         fwd_headers[key] = value
 

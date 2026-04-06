@@ -99,11 +99,16 @@ export default function TerminiScreen() {
       if (res.is_trial) {
         setTrialToast('Čestitamo! Izabrali ste svoj besplatni probni trening!');
         setTimeout(() => setTrialToast(''), 5000);
-      }
-
-      const free = (slot.slobodna_mjesta || slot.available_spots || 0) - 1;
-      if (free > 0) {
-        setShareInfo({ training_id: res.training_id, slot });
+        // Show share modal after trial toast appears (delayed)
+        const free = (slot.slobodna_mjesta || slot.available_spots || 0) - 1;
+        if (free > 0) {
+          setTimeout(() => setShareInfo({ training_id: res.training_id, slot }), 1500);
+        }
+      } else {
+        const free = (slot.slobodna_mjesta || slot.available_spots || 0) - 1;
+        if (free > 0) {
+          setShareInfo({ training_id: res.training_id, slot });
+        }
       }
 
       await loadData();
@@ -389,7 +394,7 @@ const styles = StyleSheet.create({
   emptyText: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted, textAlign: 'center' },
   toast: {
     position: 'absolute',
-    bottom: 100,
+    top: 60,
     left: 16,
     right: 16,
     backgroundColor: Colors.primary,
@@ -398,6 +403,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    zIndex: 9999,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   toastText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.white, flex: 1 },
   overlay: {

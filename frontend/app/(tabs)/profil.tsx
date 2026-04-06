@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  RefreshControl, ActivityIndicator, Alert,
+  RefreshControl, ActivityIndicator, Alert, Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -68,23 +68,34 @@ export default function ProfilScreen() {
           <View style={styles.avatar}>
             <Feather name="user" size={36} color={Colors.primary} />
           </View>
-          <Text style={styles.userName}>{user?.ime} {user?.prezime}</Text>
+          <Text style={styles.userName}>{user?.name || [user?.ime, user?.prezime].filter(Boolean).join(' ') || ''}</Text>
           <Text style={styles.userContact}>{user?.email || user?.phone}</Text>
         </View>
 
         {/* Membership Status */}
-        {stats && total > 0 && (
+        {stats && (total > 0 || stats.pending_paket || stats.ima_aktivnu_clanarinu) && (
           <View style={styles.card} testID="membership-status-card">
             <Text style={styles.cardTitle}>Status članarine</Text>
-            <View style={styles.statusRow}>
-              <Feather name="trending-up" size={18} color={Colors.primary} />
-              <Text style={styles.statusText}>
-                Preostalo termina: <Text style={styles.goldBig}>{remaining}</Text>/{total}
-              </Text>
-            </View>
-            <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${Math.min(100, (remaining / (total || 1)) * 100)}%` }]} />
-            </View>
+            {total > 0 ? (
+              <>
+                <View style={styles.statusRow}>
+                  <Feather name="trending-up" size={18} color={Colors.primary} />
+                  <Text style={styles.statusText}>
+                    Preostalo termina: <Text style={styles.goldBig}>{remaining}</Text>/{total}
+                  </Text>
+                </View>
+                <View style={styles.progressBg}>
+                  <View style={[styles.progressFill, { width: `${Math.min(100, (remaining / (total || 1)) * 100)}%` }]} />
+                </View>
+              </>
+            ) : stats.pending_paket ? (
+              <View style={styles.statusRow}>
+                <Feather name="clock" size={18} color={Colors.primary} />
+                <Text style={styles.statusText}>
+                  Paket <Text style={styles.goldBig}>{stats.pending_paket}</Text> čeka aktivaciju
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.statusDetails}>
               <View style={styles.statusDetail}>
                 <Feather name="clock" size={14} color={Colors.muted} />
@@ -133,16 +144,30 @@ export default function ProfilScreen() {
               <Text style={styles.infoText}>{user.phone}</Text>
             </View>
           )}
-          {(stats?.member_since || stats?.clan_od) && (
+          {(stats?.member_since || stats?.clan_od || stats?.created_at || user?.created_at) && (
             <View style={styles.infoRow}>
               <Feather name="calendar" size={16} color={Colors.muted} />
-              <Text style={styles.infoText}>Član od {formatDateShort(stats.member_since || stats.clan_od)}</Text>
+              <Text style={styles.infoText}>Član od {formatDateShort(stats?.member_since || stats?.clan_od || stats?.created_at || user?.created_at)}</Text>
             </View>
           )}
         </View>
 
         {/* Menu Items */}
         <View style={styles.menuSection}>
+          {user?.is_admin && (
+            <TouchableOpacity
+              testID="menu-admin-panel"
+              style={[styles.menuItem, styles.adminMenuItem]}
+              onPress={() => Linking.openURL('https://linea-pilates-reformer-production.up.railway.app')}
+            >
+              <View style={[styles.menuIconWrap, styles.adminIconWrap]}>
+                <Feather name="shield" size={18} color={Colors.white} />
+              </View>
+              <Text style={[styles.menuText, styles.adminMenuText]}>Admin Panel</Text>
+              <Feather name="external-link" size={20} color={Colors.primary} />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             testID="menu-weight"
             style={styles.menuItem}
@@ -245,6 +270,9 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   menuText: { flex: 1, fontFamily: Fonts.bodyMedium, fontSize: Sizes.body, color: Colors.foreground },
+  adminMenuItem: { borderWidth: 2, borderColor: Colors.primary },
+  adminIconWrap: { backgroundColor: Colors.primary },
+  adminMenuText: { fontFamily: Fonts.bodyBold, color: Colors.primary },
   logoutBtn: {
     borderWidth: 2,
     borderColor: Colors.danger,
