@@ -1,4 +1,10 @@
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || '';
+import { Platform } from 'react-native';
+
+// Web uses proxy (same-origin, no CORS issues with cookies)
+// Native uses direct production URL (no CORS on native)
+const API_BASE = Platform.OS === 'web'
+  ? (process.env.EXPO_PUBLIC_BACKEND_URL || '')
+  : (process.env.EXPO_PUBLIC_API_URL || process.env.EXPO_PUBLIC_BACKEND_URL || '');
 
 type FetchOptions = RequestInit & { timeout?: number };
 
