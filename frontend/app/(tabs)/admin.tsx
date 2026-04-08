@@ -66,6 +66,7 @@ function DashboardSection() {
   const [reminders, setReminders] = useState<any[]>([]);
   const [finance, setFinance] = useState<any>(null);
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [newReminder, setNewReminder] = useState('');
@@ -78,11 +79,12 @@ function DashboardSection() {
 
   const load = useCallback(async () => {
     try {
-      const [st, rem, fin, usr] = await Promise.allSettled([
+      const [st, rem, fin, usr, reqs] = await Promise.allSettled([
         api.get('/api/admin/stats'),
         api.get('/api/admin/reminders'),
         api.get('/api/admin/finance'),
         api.get('/api/admin/users'),
+        api.get('/api/admin/package-requests'),
       ]);
       if (st.status === 'fulfilled') setStats(st.value);
       if (rem.status === 'fulfilled') setReminders(Array.isArray(rem.value) ? rem.value : []);
@@ -90,6 +92,10 @@ function DashboardSection() {
       if (usr.status === 'fulfilled') {
         const list = Array.isArray(usr.value) ? usr.value : [];
         setRecentUsers(list.sort((a: any, b: any) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 5));
+      }
+      if (reqs.status === 'fulfilled') {
+        const all = Array.isArray(reqs.value) ? reqs.value : [];
+        setPendingRequests(all.filter((r: any) => r.status === 'pending'));
       }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
@@ -132,6 +138,26 @@ function DashboardSection() {
 
   if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
+  const approveRequest = async (id: string) => {
+    try {
+      await api.post(`/api/admin/package-requests/${id}/approve`);
+      Alert.alert('Uspješno', 'Paket odobren');
+      await load();
+    } catch (e: any) { Alert.alert('Greška', e.message || 'Greška pri odobravanju'); }
+  };
+
+  const rejectRequest = async (id: string) => {
+    Alert.alert('Odbij zahtjev', 'Da li ste sigurni?', [
+      { text: 'Ne', style: 'cancel' },
+      { text: 'Da, odbij', style: 'destructive', onPress: async () => {
+        try {
+          await api.post(`/api/admin/package-requests/${id}/reject`);
+          await load();
+        } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+      }},
+    ]);
+  };
+
   const currentMonth = finance?.months?.[0];
 
   return (
@@ -157,6 +183,30 @@ function DashboardSection() {
           </View>
         ))}
       </ScrollView>
+
+      {/* Pending Package Requests */}
+      {pendingRequests.length > 0 && (
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Zahtjevi na čekanju ({pendingRequests.length})</Text>
+          {pendingRequests.map((r: any) => (
+            <View key={r.id} style={s.requestRow} testID={`pending-request-${r.id}`}>
+              <View style={s.requestInfo}>
+                <Text style={s.userName}>{r.user_name}</Text>
+                <Text style={s.userSub}>{r.package_name} — {r.package_price} KM</Text>
+                <Text style={s.userSub}>{r.package_sessions} termina • {(r.created_at || '').slice(0, 10)}</Text>
+              </View>
+              <View style={s.requestActions}>
+                <TouchableOpacity testID={`approve-req-${r.id}`} style={s.approveBtn} onPress={() => approveRequest(r.id)}>
+                  <Feather name="check" size={16} color={Colors.white} />
+                </TouchableOpacity>
+                <TouchableOpacity testID={`reject-req-${r.id}`} style={s.rejectBtn} onPress={() => rejectRequest(r.id)}>
+                  <Feather name="x" size={16} color={Colors.white} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* Reminders */}
       <View style={s.card}>
@@ -586,13 +636,18 @@ function UsersSection() {
       <Modal visible={!!noteModal} transparent animationType="fade">
         <View style={s.modalOverlay}>
           <View style={s.modalContent}>
-            <Text style={s.modalTitle}>Bilješka za {noteModal?.name}</Text>
-            <TextInput style={[s.modalInput, { minHeight: 100, textAlignVertical: 'top' }]} placeholder="Upišite bilješku..."
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Bilješka za {noteModal?.name}</Text>
+              <TouchableOpacity onPress={() => setNoteModal(null)}>
+                <Feather name="x" size={22} color={Colors.foreground} />
+              </TouchableOpacity>
+            </View>
+            <TextInput style={[s.modalInput, { minHeight: 120, textAlignVertical: 'top' }]} placeholder="Upišite bilješku..."
               placeholderTextColor={Colors.muted} value={noteText} onChangeText={setNoteText} multiline />
-            <TouchableOpacity style={s.modalBtnConfirm} onPress={saveNote}>
-              <Text style={s.modalBtnConfirmText}>Sačuvaj bilješku</Text>
+            <TouchableOpacity testID="save-note-btn" style={s.noteModalSaveBtn} onPress={saveNote}>
+              <Text style={s.noteModalSaveBtnText}>Sačuvaj bilješku</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.modalBtnCancel} onPress={() => setNoteModal(null)}>
+            <TouchableOpacity style={{ paddingVertical: 12, alignItems: 'center' }} onPress={() => setNoteModal(null)}>
               <Text style={s.modalBtnCancelText}>Odustani</Text>
             </TouchableOpacity>
           </View>
@@ -773,6 +828,8 @@ const s = StyleSheet.create({
   modalBtnCancelText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.foreground },
   modalBtnConfirm: { flex: 1, height: 44, borderRadius: 9999, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
   modalBtnConfirmText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.white },
+  noteModalSaveBtn: { width: '100%', height: 48, borderRadius: 9999, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center', marginTop: 4 },
+  noteModalSaveBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.white },
   // History
   histSection: { fontFamily: Fonts.bodySemiBold, fontSize: 12, color: Colors.muted, marginTop: 16, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
   histRow: { paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
@@ -785,4 +842,10 @@ const s = StyleSheet.create({
   pkgOptionTextActive: { color: Colors.primary, fontFamily: Fonts.bodySemiBold },
   // Warning row
   warningRow: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  // Package requests
+  requestRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  requestInfo: { flex: 1 },
+  requestActions: { flexDirection: 'row', gap: 8 },
+  approveBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#059669', justifyContent: 'center', alignItems: 'center' },
+  rejectBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.danger, justifyContent: 'center', alignItems: 'center' },
 });

@@ -70,13 +70,9 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
-    try {
-      // Google OAuth - redirects to registration with pre-filled data
-      // Since backend uses phone+PIN auth, Google provides name/email for registration
-      router.push({ pathname: '/(auth)/register', params: { fromGoogle: 'true' } });
-    } catch (e: any) {
-      setError('Greška pri Google prijavi');
-    }
+    // Google Sign-In: redirects to registration with pre-filled data
+    // Backend uses phone+PIN, Google provides name/email convenience for registration
+    router.push({ pathname: '/(auth)/register', params: { fromGoogle: 'true' } });
   };
 
   if (step === 'pin') {

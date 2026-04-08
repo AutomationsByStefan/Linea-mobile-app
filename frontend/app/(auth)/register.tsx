@@ -1,17 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Image, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
 import { Colors, Fonts, Sizes } from '../../src/theme';
 import { useAuth } from '../../src/context/AuthContext';
 import CountryPicker from '../../src/components/CountryPicker';
 import { countries, Country } from '../../src/data/countries';
 
+WebBrowser.maybeCompleteAuthSession();
+
 const LOGO_URL = 'https://customer-assets.emergentagent.com/job_pilates-hub-12/artifacts/ny62z2sx_linea.png';
+const GOOGLE_CLIENT_ID = ''; // Set your Google OAuth Client ID here
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -63,12 +68,34 @@ export default function RegisterScreen() {
   };
 
   const handleGoogleSignIn = async () => {
-    // Google OAuth redirects to get user info, then pre-fills form
-    // Since backend uses phone+PIN, Google just provides name/email convenience
+    if (!GOOGLE_CLIENT_ID) {
+      // Google OAuth not configured — show info message
+      Alert.alert(
+        'Google prijava',
+        'Za korištenje Google prijave potrebno je konfigurisati Google OAuth Client ID.\n\nKontaktirajte administratora studija.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
     try {
-      // Placeholder for Google OAuth integration
-      // When configured: Gets Google profile → sets ime, prezime, email
-      setError('Google prijava zahtijeva konfiguraciju. Unesite podatke ručno.');
+      const redirectUri = AuthSession.makeRedirectUri({ preferLocalhost: false });
+      const discovery = {
+        authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+        tokenEndpoint: 'https://oauth2.googleapis.com/token',
+      };
+      const authResult = await AuthSession.startAsync({
+        authUrl: `${discovery.authorizationEndpoint}?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=profile%20email`,
+      });
+
+      if (authResult.type === 'success' && authResult.params?.access_token) {
+        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: { Authorization: `Bearer ${authResult.params.access_token}` },
+        });
+        const userInfo = await userInfoResponse.json();
+        if (userInfo.given_name) setIme(userInfo.given_name);
+        if (userInfo.family_name) setPrezime(userInfo.family_name);
+        if (userInfo.email) setEmail(userInfo.email);
+      }
     } catch (e: any) {
       setError('Greška pri Google prijavi');
     }
