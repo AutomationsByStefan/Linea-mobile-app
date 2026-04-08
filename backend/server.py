@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
@@ -8,15 +8,15 @@ import httpx
 import logging
 import os
 import re
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timezone, date, timedelta
+import uuid
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# External API base URL
 EXTERNAL_API = "https://linea-pilates-reformer-production.up.railway.app"
 
-# MongoDB connection for local archive
 mongo_url = os.environ['MONGO_URL']
 mongo_client = AsyncIOMotorClient(mongo_url)
 db = mongo_client[os.environ.get('DB_NAME', 'linea_pilates')]
@@ -34,7 +34,6 @@ app.add_middleware(
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Persistent HTTP client for connection pooling
 http_client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
 
 
@@ -44,54 +43,316 @@ async def shutdown():
     mongo_client.close()
 
 
-# Account archive endpoint - moves user data to archived_users collection
+async def get_railway_data(path: str, cookies: dict):
+    try:
+        resp = await http_client.get(f"{EXTERNAL_API}{path}", cookies=cookies)
+        return resp.json() if resp.status_code == 200 else []
+    except:
+        return []
+
+
+async def check_admin(cookies: dict):
+    try:
+        resp = await http_client.get(f"{EXTERNAL_API}/api/auth/me", cookies=cookies)
+        if resp.status_code == 200:
+            user = resp.json()
+            if user.get('is_admin'):
+                return user
+        return None
+    except:
+        return None
+
+
+# === ADMIN STATS ===
+@app.get("/api/admin/stats")
+async def admin_stats(request: Request):
+    cookies = dict(request.cookies)
+    admin = await check_admin(cookies)
+    if not admin:
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, status_code=403)
+
+    users = await get_railway_data("/api/admin/users", cookies)
+    bookings = await get_railway_data("/api/admin/bookings", cookies)
+    requests_data = await get_railway_data("/api/admin/package-requests", cookies)
+
+    today = date.today().isoformat()
+    users_list = users if isinstance(users, list) else []
+    bookings_list = bookings if isinstance(bookings, list) else []
+    requests_list = requests_data if isinstance(requests_data, list) else []
+
+    active = sum(1 for u in users_list if u.get('aktivna_clanarina'))
+    today_trainings = sum(1 for b in bookings_list if b.get('datum') == today and b.get('status', 'upcoming') != 'cancelled')
+    pending = sum(1 for r in requests_list if r.get('status') == 'pending')
+
+    approved = [r for r in requests_list if r.get('status') == 'approved']
+    now = datetime.now(timezone.utc)
+    month_income = sum(r.get('package_price', 0) for r in approved
+                       if r.get('approved_at', r.get('created_at', '')).startswith(f"{now.year}-{now.month:02d}"))
+
+    manual_income = await db.manual_income.find(
+        {"month": f"{now.year}-{now.month:02d}"},
+        {"_id": 0}
+    ).to_list(100)
+    manual_total = sum(m.get('amount', 0) for m in manual_income)
+
+    return {
+        "total_users": len(users_list) + 1,
+        "active_memberships": active,
+        "today_trainings": today_trainings,
+        "pending_requests": pending,
+        "monthly_income": month_income + manual_total,
+    }
+
+
+# === ADMIN WARNINGS ===
+@app.get("/api/admin/warnings")
+async def admin_warnings(request: Request):
+    cookies = dict(request.cookies)
+    admin = await check_admin(cookies)
+    if not admin:
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, status_code=403)
+
+    users = await get_railway_data("/api/admin/users", cookies)
+    users_list = users if isinstance(users, list) else []
+
+    warnings = []
+    for u in users_list:
+        remaining = u.get('preostali_termini', 0)
+        expiry = u.get('datum_isteka', '')
+        has_membership = u.get('aktivna_clanarina', False)
+
+        if has_membership and remaining == 0:
+            warnings.append({
+                "user_id": u.get('user_id'),
+                "name": u.get('name'),
+                "phone": u.get('phone'),
+                "type": "no_sessions",
+                "message": f"Preostalo 0 termina",
+            })
+        elif has_membership and expiry:
+            try:
+                exp_date = datetime.fromisoformat(expiry.replace('Z', '+00:00'))
+                days_left = (exp_date - datetime.now(timezone.utc)).days
+                if days_left <= 3:
+                    warnings.append({
+                        "user_id": u.get('user_id'),
+                        "name": u.get('name'),
+                        "phone": u.get('phone'),
+                        "type": "expiring",
+                        "message": f"Članarina ističe {expiry[:10]}",
+                    })
+            except:
+                pass
+    return warnings
+
+
+# === ADMIN FINANCE ===
+@app.get("/api/admin/finance")
+async def admin_finance(request: Request):
+    cookies = dict(request.cookies)
+    admin = await check_admin(cookies)
+    if not admin:
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, status_code=403)
+
+    requests_data = await get_railway_data("/api/admin/package-requests", cookies)
+    approved = [r for r in (requests_data if isinstance(requests_data, list) else []) if r.get('status') == 'approved']
+
+    monthly = {}
+    for r in approved:
+        dt = r.get('approved_at', r.get('created_at', ''))[:7]
+        if not dt:
+            continue
+        if dt not in monthly:
+            monthly[dt] = {"packages": {}, "total": 0}
+        pkg = r.get('package_name', 'Nepoznat')
+        price = r.get('package_price', 0)
+        monthly[dt]["total"] += price
+        monthly[dt]["packages"][pkg] = monthly[dt]["packages"].get(pkg, {"count": 0, "total": 0})
+        monthly[dt]["packages"][pkg]["count"] += 1
+        monthly[dt]["packages"][pkg]["total"] += price
+
+    manual_records = await db.manual_income.find({}, {"_id": 0}).to_list(500)
+    for m in manual_records:
+        dt = m.get('month', '')
+        if dt not in monthly:
+            monthly[dt] = {"packages": {}, "total": 0}
+        monthly[dt]["total"] += m.get('amount', 0)
+        monthly[dt].setdefault("manual", [])
+        monthly[dt]["manual"].append(m)
+
+    months = []
+    for key in sorted(monthly.keys(), reverse=True):
+        months.append({
+            "month": key,
+            "total": monthly[key]["total"],
+            "packages": monthly[key]["packages"],
+            "manual": monthly[key].get("manual", []),
+        })
+
+    return {"months": months}
+
+
+@app.post("/api/admin/finance/manual")
+async def add_manual_income(request: Request):
+    cookies = dict(request.cookies)
+    admin = await check_admin(cookies)
+    if not admin:
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, status_code=403)
+
+    body = await request.json()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "amount": body.get("amount", 0),
+        "description": body.get("description", ""),
+        "category": body.get("category", "Ostalo"),
+        "date": body.get("date", date.today().isoformat()),
+        "month": body.get("date", date.today().isoformat())[:7],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.manual_income.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+# === USER HISTORY ===
+@app.get("/api/admin/users/{user_id}/history")
+async def user_history(request: Request, user_id: str):
+    cookies = dict(request.cookies)
+    admin = await check_admin(cookies)
+    if not admin:
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, status_code=403)
+
+    requests_data = await get_railway_data("/api/admin/package-requests", cookies)
+    all_requests = requests_data if isinstance(requests_data, list) else []
+
+    user_requests = [r for r in all_requests if r.get('user_id') == user_id]
+
+    memberships = []
+    for r in user_requests:
+        if r.get('status') == 'approved':
+            memberships.append({
+                "name": r.get('package_name'),
+                "price": r.get('package_price'),
+                "sessions": r.get('package_sessions'),
+                "status": "aktivna" if True else "prethodna",
+                "created_at": r.get('created_at'),
+            })
+
+    return {"memberships": memberships, "requests": user_requests}
+
+
+# === ADD MEMBERSHIP ===
+@app.post("/api/admin/users/{user_id}/add-membership")
+async def add_membership(request: Request, user_id: str):
+    cookies = dict(request.cookies)
+    admin = await check_admin(cookies)
+    if not admin:
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, status_code=403)
+
+    body = await request.json()
+    pkg_id = body.get("package_id")
+    custom = body.get("custom")
+
+    if pkg_id and pkg_id != "custom":
+        try:
+            resp = await http_client.post(
+                f"{EXTERNAL_API}/api/admin/package-requests",
+                json={"user_id": user_id, "package_id": pkg_id},
+                cookies=cookies,
+            )
+            if resp.status_code == 200:
+                req_data = resp.json()
+                req_id = req_data.get('id', req_data.get('request_id'))
+                if req_id:
+                    approve_resp = await http_client.post(
+                        f"{EXTERNAL_API}/api/admin/package-requests/{req_id}/approve",
+                        cookies=cookies,
+                    )
+                    return approve_resp.json() if approve_resp.status_code == 200 else {"detail": "Greška pri odobravanju"}
+            return {"detail": "Greška pri kreiranju zahtjeva"}
+        except Exception as e:
+            return JSONResponse({"detail": str(e)}, status_code=500)
+    elif custom:
+        doc = {
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "name": custom.get("name", "Custom"),
+            "price": custom.get("price", 0),
+            "sessions": custom.get("sessions", 0),
+            "duration": custom.get("duration", 30),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "status": "active",
+        }
+        await db.custom_memberships.insert_one(doc)
+        doc.pop("_id", None)
+        return {"success": True, "message": f"Članarina kreirana: {doc['name']}"}
+
+    return JSONResponse({"detail": "Nedostaju parametri"}, status_code=400)
+
+
+# === SCHEDULE GENERATE ===
+@app.post("/api/admin/schedule/generate")
+async def generate_schedule(request: Request):
+    cookies = dict(request.cookies)
+    admin = await check_admin(cookies)
+    if not admin:
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, status_code=403)
+
+    body = await request.json()
+    days = body.get("days", 7)
+    start = date.today()
+    times = ["08:00", "09:00", "10:00", "11:00", "17:00", "18:00", "19:00", "20:00"]
+    created = 0
+
+    existing = await get_railway_data("/api/admin/schedule", cookies)
+    existing_ids = {s.get('id') for s in (existing if isinstance(existing, list) else [])}
+
+    for i in range(days * 2):
+        d = start + timedelta(days=i)
+        if d.weekday() == 6:
+            continue
+        for t in times:
+            slot_id = f"slot_{d.isoformat().replace('-', '')}_{t.replace(':', '')}"
+            if slot_id in existing_ids:
+                continue
+            try:
+                resp = await http_client.post(
+                    f"{EXTERNAL_API}/api/admin/schedule",
+                    json={"id": slot_id, "datum": d.isoformat(), "vrijeme": t, "instruktor": "Marija Trisic", "ukupno_mjesta": 3},
+                    cookies=cookies,
+                )
+                if resp.status_code in (200, 201):
+                    created += 1
+            except:
+                pass
+        if created > 0 or i >= days:
+            break
+
+    return {"success": True, "created": created, "message": f"Generisano {created} termina"}
+
+
+# === ACCOUNT ARCHIVE ===
 @app.post("/api/account/archive")
 async def archive_account(request: Request):
-    """Archive user account - soft delete by moving to archived_users collection."""
     cookies = dict(request.cookies)
-
-    # Get user data from external API
     try:
-        me_resp = await http_client.get(
-            f"{EXTERNAL_API}/api/auth/me",
-            cookies=cookies,
-        )
+        me_resp = await http_client.get(f"{EXTERNAL_API}/api/auth/me", cookies=cookies)
         if me_resp.status_code != 200:
-            return Response(
-                content='{"detail": "Niste prijavljeni"}',
-                status_code=401,
-                media_type="application/json",
-            )
+            return JSONResponse({"detail": "Niste prijavljeni"}, status_code=401)
         user_data = me_resp.json()
     except Exception as e:
-        logger.error(f"Archive - failed to get user: {e}")
-        return Response(
-            content='{"detail": "Greška pri dohvatanju korisničkih podataka"}',
-            status_code=500,
-            media_type="application/json",
-        )
+        return JSONResponse({"detail": "Greška"}, status_code=500)
 
-    # Get user stats
+    stats_data = {}
+    trainings_data = []
     try:
-        stats_resp = await http_client.get(
-            f"{EXTERNAL_API}/api/user/stats",
-            cookies=cookies,
-        )
-        stats_data = stats_resp.json() if stats_resp.status_code == 200 else {}
+        sr = await http_client.get(f"{EXTERNAL_API}/api/user/stats", cookies=cookies)
+        stats_data = sr.json() if sr.status_code == 200 else {}
+        tr = await http_client.get(f"{EXTERNAL_API}/api/trainings/past", cookies=cookies)
+        trainings_data = tr.json() if tr.status_code == 200 else []
     except:
-        stats_data = {}
+        pass
 
-    # Get user trainings
-    try:
-        trainings_resp = await http_client.get(
-            f"{EXTERNAL_API}/api/trainings/past",
-            cookies=cookies,
-        )
-        trainings_data = trainings_resp.json() if trainings_resp.status_code == 200 else []
-    except:
-        trainings_data = []
-
-    # Archive to MongoDB
     archive_doc = {
         "user_data": user_data,
         "stats": stats_data,
@@ -104,37 +365,18 @@ async def archive_account(request: Request):
         "email": user_data.get("email", ""),
     }
 
-    try:
-        await db.archived_users.insert_one(archive_doc)
-        logger.info(f"Archived user: {user_data.get('phone', 'unknown')}")
-    except Exception as e:
-        logger.error(f"Archive - MongoDB error: {e}")
-        return Response(
-            content='{"detail": "Greška pri arhiviranju naloga"}',
-            status_code=500,
-            media_type="application/json",
-        )
-
-    # Logout from external API
+    await db.archived_users.insert_one(archive_doc)
     try:
         await http_client.post(f"{EXTERNAL_API}/api/auth/logout", cookies=cookies)
     except:
         pass
-
-    return Response(
-        content='{"success": true, "message": "Nalog je uspješno obrisan"}',
-        status_code=200,
-        media_type="application/json",
-    )
+    return {"success": True, "message": "Nalog je uspješno obrisan"}
 
 
-# Reverse proxy for all other /api/* requests
+# === REVERSE PROXY ===
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def proxy(request: Request, path: str):
-    """Reverse proxy all /api/* requests to the external Pilates studio API."""
     url = f"{EXTERNAL_API}/api/{path}"
-
-    # Forward relevant headers (skip cookie - forwarded separately)
     fwd_headers = {}
     for key, value in request.headers.items():
         lower = key.lower()
@@ -147,18 +389,12 @@ async def proxy(request: Request, path: str):
 
     try:
         resp = await http_client.request(
-            method=request.method,
-            url=url,
-            headers=fwd_headers,
-            content=body if body else None,
-            cookies=cookies,
+            method=request.method, url=url, headers=fwd_headers,
+            content=body if body else None, cookies=cookies,
         )
     except httpx.RequestError as e:
-        logger.error(f"Proxy error: {e}")
-        return Response(content=f'{{"detail": "Proxy error: {str(e)}"}}', status_code=502,
-                        media_type="application/json")
+        return Response(content=f'{{"detail": "Proxy error: {str(e)}"}}', status_code=502, media_type="application/json")
 
-    # Build response headers - forward Set-Cookie with domain adjustments
     resp_headers = {}
     for key, value in resp.headers.multi_items():
         lower = key.lower()
@@ -174,11 +410,8 @@ async def proxy(request: Request, path: str):
             continue
         resp_headers[key] = value
 
-    response = Response(
-        content=resp.content,
-        status_code=resp.status_code,
-        media_type=resp.headers.get('content-type', 'application/json'),
-    )
+    response = Response(content=resp.content, status_code=resp.status_code,
+                        media_type=resp.headers.get('content-type', 'application/json'))
 
     for key, value in resp_headers.items():
         if key == 'set-cookie' and isinstance(value, list):
@@ -186,5 +419,4 @@ async def proxy(request: Request, path: str):
                 response.headers.append('set-cookie', cookie)
         else:
             response.headers[key] = value
-
     return response

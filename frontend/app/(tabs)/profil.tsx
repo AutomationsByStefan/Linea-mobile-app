@@ -198,7 +198,7 @@ export default function ProfilScreen() {
             <TouchableOpacity
               testID="menu-admin-panel"
               style={[styles.menuItem, styles.adminMenuItem]}
-              onPress={() => router.push('/admin')}
+              onPress={() => router.push('/(tabs)/admin')}
             >
               <View style={[styles.menuIconWrap, styles.adminIconWrap]}>
                 <Feather name="shield" size={18} color={Colors.white} />
