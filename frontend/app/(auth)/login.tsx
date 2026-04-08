@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Image, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { Colors, Fonts, Sizes } from '../../src/theme';
-import { authAPI } from '../../src/api';
+import { authAPI, api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
 import CountryPicker from '../../src/components/CountryPicker';
 import { countries, Country } from '../../src/data/countries';
@@ -17,10 +18,18 @@ WebBrowser.maybeCompleteAuthSession();
 
 const LOGO_URL = 'https://customer-assets.emergentagent.com/job_pilates-hub-12/artifacts/ny62z2sx_linea.png';
 
+// Google OAuth config — set your Client ID from Google Cloud Console
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '';
+
+const discovery = {
+  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+  tokenEndpoint: 'https://oauth2.googleapis.com/token',
+};
+
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { login } = useAuth();
+  const { login, setUser, checkAuth } = useAuth();
 
   const [step, setStep] = useState<'phone' | 'pin'>('phone');
   const [country, setCountry] = useState<Country>(countries[0]);
@@ -29,7 +38,61 @@ export default function LoginScreen() {
   const [userName, setUserName] = useState('');
   const [fullPhone, setFullPhone] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Google Auth request
+  const redirectUri = AuthSession.makeRedirectUri({ preferLocalhost: false });
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: GOOGLE_WEB_CLIENT_ID,
+      scopes: ['profile', 'email'],
+      redirectUri,
+      responseType: AuthSession.ResponseType.Token,
+    },
+    discovery
+  );
+
+  // Handle Google auth response
+  useEffect(() => {
+    if (response?.type === 'success' && response.params?.access_token) {
+      handleGoogleToken(response.params.access_token);
+    } else if (response?.type === 'error') {
+      setError('Google prijava nije uspjela');
+      setGoogleLoading(false);
+    }
+  }, [response]);
+
+  const handleGoogleToken = async (accessToken: string) => {
+    setGoogleLoading(true);
+    setError('');
+    try {
+      const result = await api.post('/api/auth/google/mobile', { access_token: accessToken });
+
+      if (result.exists && result.user) {
+        // User exists — auto-logged in, session cookie set by backend
+        setUser(result.user);
+        await checkAuth();
+        router.replace('/(tabs)');
+      } else if (!result.exists) {
+        // New user — go to Google registration (simplified)
+        router.push({
+          pathname: '/(auth)/register',
+          params: {
+            fromGoogle: 'true',
+            googleToken: accessToken,
+            googleEmail: result.email || '',
+            googleName: result.given_name || '',
+            googleSurname: result.family_name || '',
+          },
+        });
+      }
+    } catch (e: any) {
+      setError(e.message || 'Greška pri Google prijavi');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handlePhoneCheck = async () => {
     const num = phone.replace(/\s/g, '');
@@ -70,9 +133,16 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
-    // Google Sign-In: redirects to registration with pre-filled data
-    // Backend uses phone+PIN, Google provides name/email convenience for registration
-    router.push({ pathname: '/(auth)/register', params: { fromGoogle: 'true' } });
+    if (!GOOGLE_WEB_CLIENT_ID) {
+      Alert.alert(
+        'Google prijava',
+        'Za korištenje Google prijave potrebno je konfigurisati Google OAuth Client ID.\n\nKontaktirajte administratora studija.',
+      );
+      return;
+    }
+    setGoogleLoading(true);
+    setError('');
+    await promptAsync();
   };
 
   if (step === 'pin') {
@@ -83,7 +153,6 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Image source={{ uri: LOGO_URL }} style={styles.logoLarge} resizeMode="contain" testID="login-logo" />
-
           <Text style={styles.title}>Zdravo, {userName}</Text>
           <Text style={styles.subtitle}>Unesite vaš 4-cifreni PIN</Text>
 
@@ -130,13 +199,10 @@ export default function LoginScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Large centered logo */}
         <Image source={{ uri: LOGO_URL }} style={styles.logoLarge} resizeMode="contain" testID="login-logo" />
-
         <Text style={styles.title}>Dobrodošli</Text>
         <Text style={styles.subtitle}>Unesite broj telefona za prijavu</Text>
 
-        {/* Phone input row */}
         <View style={styles.phoneRow}>
           <CountryPicker selected={country} onSelect={setCountry} />
           <View style={styles.phoneInputWrap}>
@@ -172,10 +238,18 @@ export default function LoginScreen() {
           <View style={styles.separatorLine} />
         </View>
 
-        {/* Google Sign-In button */}
-        <TouchableOpacity testID="google-signin-btn" style={styles.googleBtn} onPress={handleGoogleSignIn}>
-          <Text style={styles.googleIcon}>G</Text>
-          <Text style={styles.googleBtnText}>Prijavi se sa Google</Text>
+        <TouchableOpacity
+          testID="google-signin-btn"
+          style={[styles.googleBtn, googleLoading && styles.btnDisabled]}
+          onPress={handleGoogleSignIn}
+          disabled={googleLoading}
+        >
+          {googleLoading ? <ActivityIndicator color={Colors.foreground} /> : (
+            <>
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={styles.googleBtnText}>Prijavi se sa Google</Text>
+            </>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -190,11 +264,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     alignItems: 'center',
   },
-  logoLarge: {
-    width: 240,
-    height: 160,
-    marginBottom: 40,
-  },
+  logoLarge: { width: 240, height: 160, marginBottom: 40 },
   title: {
     fontFamily: Fonts.heading,
     fontSize: 26,
@@ -209,12 +279,7 @@ const styles = StyleSheet.create({
     marginBottom: 36,
     textAlign: 'center',
   },
-  phoneRow: {
-    flexDirection: 'row',
-    gap: 10,
-    width: '100%',
-    marginBottom: 20,
-  },
+  phoneRow: { flexDirection: 'row', gap: 10, width: '100%', marginBottom: 20 },
   phoneInputWrap: {
     flex: 1,
     flexDirection: 'row',
@@ -269,11 +334,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   btnDisabled: { opacity: 0.6 },
-  primaryBtnText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: Sizes.body,
-    color: Colors.white,
-  },
+  primaryBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.white },
   separator: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -281,12 +342,7 @@ const styles = StyleSheet.create({
     marginVertical: 16,
   },
   separatorLine: { flex: 1, height: 1, backgroundColor: Colors.border },
-  separatorText: {
-    fontFamily: Fonts.body,
-    fontSize: Sizes.small,
-    color: Colors.muted,
-    marginHorizontal: 16,
-  },
+  separatorText: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted, marginHorizontal: 16 },
   googleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -299,16 +355,8 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
     gap: 10,
   },
-  googleIcon: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#4285F4',
-  },
-  googleBtnText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: Sizes.body,
-    color: Colors.foreground,
-  },
+  googleIcon: { fontSize: 20, fontWeight: '700', color: '#4285F4' },
+  googleBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.foreground },
   linkText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: Sizes.small,

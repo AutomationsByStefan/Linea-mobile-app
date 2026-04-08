@@ -373,6 +373,185 @@ async def archive_account(request: Request):
     return {"success": True, "message": "Nalog je uspješno obrisan"}
 
 
+# === GOOGLE AUTH FOR MOBILE ===
+import random
+import string
+
+async def verify_google_token(access_token: str):
+    """Verify Google access token and return user info."""
+    try:
+        resp = await http_client.get(
+            'https://www.googleapis.com/oauth2/v2/userinfo',
+            headers={'Authorization': f'Bearer {access_token}'},
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except:
+        return None
+
+
+def generate_random_pin():
+    return ''.join(random.choices(string.digits, k=4))
+
+
+@app.post("/api/auth/google/mobile")
+async def google_mobile_auth(request: Request):
+    """
+    Google login for mobile:
+    - Receives Google access_token
+    - Verifies with Google
+    - If user exists (by email) → auto-login, return session
+    - If user doesn't exist → return info for registration
+    """
+    body = await request.json()
+    access_token = body.get('access_token')
+    if not access_token:
+        return JSONResponse({"detail": "Token je obavezan"}, status_code=400)
+
+    # Verify with Google
+    google_info = await verify_google_token(access_token)
+    if not google_info or not google_info.get('email'):
+        return JSONResponse({"detail": "Nevažeći Google token"}, status_code=401)
+
+    email = google_info['email']
+    given_name = google_info.get('given_name', '')
+    family_name = google_info.get('family_name', '')
+    google_id = google_info.get('id', '')
+
+    # Check if we have a stored Google mapping
+    google_user = await db.google_users.find_one({"email": email}, {"_id": 0})
+
+    if google_user:
+        # User exists — auto-login with stored phone+PIN
+        try:
+            login_resp = await http_client.post(
+                f"{EXTERNAL_API}/api/auth/phone/login",
+                json={"phone": google_user['phone'], "pin": google_user['pin']},
+            )
+            if login_resp.status_code == 200:
+                user_data = login_resp.json()
+
+                # Build response with session cookie forwarded
+                response = JSONResponse({
+                    "success": True,
+                    "exists": True,
+                    "user": user_data,
+                })
+
+                # Forward Set-Cookie from Railway
+                for key, value in login_resp.headers.multi_items():
+                    if key.lower() == 'set-cookie':
+                        cookie_val = re.sub(r';\s*[Dd]omain=[^;]*', '', value)
+                        if 'SameSite' not in cookie_val:
+                            cookie_val += '; SameSite=None; Secure'
+                        response.headers.append('set-cookie', cookie_val)
+
+                return response
+            else:
+                return JSONResponse({"detail": "Greška pri prijavi"}, status_code=500)
+        except Exception as e:
+            logger.error(f"Google auto-login error: {e}")
+            return JSONResponse({"detail": "Greška pri prijavi"}, status_code=500)
+    else:
+        # User doesn't exist — check Railway users by email (via admin)
+        # Try to find user with matching email in admin users list
+        # First login as admin to check (using admin cookies from the request won't work, we use a different approach)
+        # Return registration info
+        return JSONResponse({
+            "success": True,
+            "exists": False,
+            "email": email,
+            "given_name": given_name,
+            "family_name": family_name,
+            "google_id": google_id,
+        })
+
+
+@app.post("/api/auth/google/register")
+async def google_register(request: Request):
+    """
+    Register a new user via Google:
+    - Creates user on Railway with auto-generated PIN
+    - Stores Google→phone mapping locally
+    - Returns session cookie for immediate login
+    """
+    body = await request.json()
+    access_token = body.get('access_token')
+    phone = body.get('phone')
+    ime = body.get('ime')
+    prezime = body.get('prezime')
+
+    if not access_token or not phone or not ime or not prezime:
+        return JSONResponse({"detail": "Sva polja su obavezna"}, status_code=400)
+
+    # Verify Google token
+    google_info = await verify_google_token(access_token)
+    if not google_info or not google_info.get('email'):
+        return JSONResponse({"detail": "Nevažeći Google token"}, status_code=401)
+
+    email = google_info['email']
+    google_id = google_info.get('id', '')
+
+    # Check if already registered
+    existing = await db.google_users.find_one({"email": email})
+    if existing:
+        return JSONResponse({"detail": "Korisnik sa ovim emailom već postoji"}, status_code=400)
+
+    # Generate random PIN (user never needs to know it)
+    pin = generate_random_pin()
+
+    # Register on Railway
+    try:
+        reg_resp = await http_client.post(
+            f"{EXTERNAL_API}/api/auth/register",
+            json={"phone": phone, "ime": ime, "prezime": prezime, "email": email, "pin": pin},
+        )
+        if reg_resp.status_code not in (200, 201):
+            error_body = reg_resp.json() if reg_resp.headers.get('content-type', '').startswith('application/json') else {}
+            return JSONResponse(
+                {"detail": error_body.get('detail', 'Greška pri registraciji')},
+                status_code=reg_resp.status_code,
+            )
+    except Exception as e:
+        logger.error(f"Google register error: {e}")
+        return JSONResponse({"detail": "Greška pri registraciji"}, status_code=500)
+
+    # Store Google mapping locally
+    await db.google_users.insert_one({
+        "email": email,
+        "phone": phone,
+        "pin": pin,
+        "google_id": google_id,
+        "name": f"{ime} {prezime}",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    # Auto-login
+    try:
+        login_resp = await http_client.post(
+            f"{EXTERNAL_API}/api/auth/phone/login",
+            json={"phone": phone, "pin": pin},
+        )
+        if login_resp.status_code == 200:
+            user_data = login_resp.json()
+            response = JSONResponse({
+                "success": True,
+                "user": user_data,
+            })
+            for key, value in login_resp.headers.multi_items():
+                if key.lower() == 'set-cookie':
+                    cookie_val = re.sub(r';\s*[Dd]omain=[^;]*', '', value)
+                    if 'SameSite' not in cookie_val:
+                        cookie_val += '; SameSite=None; Secure'
+                    response.headers.append('set-cookie', cookie_val)
+            return response
+    except:
+        pass
+
+    return JSONResponse({"success": True, "message": "Registracija uspješna, prijavite se ponovo"})
+
+
 # === REVERSE PROXY ===
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def proxy(request: Request, path: str):
