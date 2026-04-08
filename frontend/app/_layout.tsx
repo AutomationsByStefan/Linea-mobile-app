@@ -37,6 +37,7 @@ export default function RootLayout() {
         <Stack.Screen name="tezina" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="obavjestenja" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="clanarine" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="admin" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="pozivnica/[inviteId]" options={{ animation: 'slide_from_right' }} />
       </Stack>
     </AuthProvider>

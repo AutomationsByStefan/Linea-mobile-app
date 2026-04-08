@@ -8,40 +8,50 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts, Sizes } from '../../src/theme';
 import { useAuth } from '../../src/context/AuthContext';
+import CountryPicker from '../../src/components/CountryPicker';
+import { countries, Country } from '../../src/data/countries';
 
 const LOGO_URL = 'https://customer-assets.emergentagent.com/job_pilates-hub-12/artifacts/ny62z2sx_linea.png';
 
 export default function RegisterScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ phone?: string }>();
+  const params = useLocalSearchParams<{ phone?: string; countryCode?: string; fromGoogle?: string }>();
   const { register } = useAuth();
+
+  const initialCountry = params.countryCode
+    ? countries.find(c => c.code === params.countryCode) || countries[0]
+    : countries[0];
 
   const [ime, setIme] = useState('');
   const [prezime, setPrezime] = useState('');
   const [email, setEmail] = useState('');
+  const [country, setCountry] = useState<Country>(initialCountry);
+  const [phone, setPhone] = useState(params.phone ? params.phone.replace(initialCountry.dial, '') : '');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const phoneNum = params.phone || '';
-
   const handleRegister = async () => {
-    if (!ime.trim()) { setError('Unesite ime'); return; }
-    if (!prezime.trim()) { setError('Unesite prezime'); return; }
+    if (!ime.trim()) { setError('Ime je obavezno'); return; }
+    if (!prezime.trim()) { setError('Prezime je obavezno'); return; }
+    if (!email.trim()) { setError('Email je obavezan'); return; }
+    const phoneNum = phone.replace(/\s/g, '');
+    if (!phoneNum) { setError('Broj telefona je obavezan'); return; }
     if (pin.length !== 4) { setError('PIN mora imati 4 cifre'); return; }
     if (pin !== confirmPin) { setError('PIN-ovi se ne podudaraju'); return; }
 
+    const fullPhone = params.phone || `${country.dial}${phoneNum}`;
     setLoading(true);
     setError('');
 
     try {
       await register({
-        phone: phoneNum,
+        phone: fullPhone,
         ime: ime.trim(),
         prezime: prezime.trim(),
-        email: email.trim() || undefined,
+        email: email.trim(),
         pin,
       });
       router.replace('/(tabs)');
@@ -52,22 +62,32 @@ export default function RegisterScreen() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    // Google OAuth redirects to get user info, then pre-fills form
+    // Since backend uses phone+PIN, Google just provides name/email convenience
+    try {
+      // Placeholder for Google OAuth integration
+      // When configured: Gets Google profile → sets ime, prezime, email
+      setError('Google prijava zahtijeva konfiguraciju. Unesite podatke ručno.');
+    } catch (e: any) {
+      setError('Greška pri Google prijavi');
+    }
+  };
+
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 24 }]}
         keyboardShouldPersistTaps="handled"
       >
         <Image source={{ uri: LOGO_URL }} style={styles.logo} resizeMode="contain" />
         <Text style={styles.title}>Kreirajte nalog</Text>
-        {phoneNum ? <Text style={styles.phoneInfo}>{phoneNum}</Text> : null}
+        <Text style={styles.subtitle}>Sva polja su obavezna</Text>
 
+        {/* Name fields */}
         <View style={styles.row}>
           <View style={styles.halfField}>
-            <Text style={styles.label}>Ime</Text>
+            <Text style={styles.label}>Ime *</Text>
             <TextInput
               testID="register-ime-input"
               style={styles.input}
@@ -78,7 +98,7 @@ export default function RegisterScreen() {
             />
           </View>
           <View style={styles.halfField}>
-            <Text style={styles.label}>Prezime</Text>
+            <Text style={styles.label}>Prezime *</Text>
             <TextInput
               testID="register-prezime-input"
               style={styles.input}
@@ -90,8 +110,9 @@ export default function RegisterScreen() {
           </View>
         </View>
 
+        {/* Email */}
         <View style={styles.field}>
-          <Text style={styles.label}>Email (opcionalno)</Text>
+          <Text style={styles.label}>Email *</Text>
           <View style={styles.inputRow}>
             <Feather name="mail" size={18} color={Colors.muted} style={styles.inputIcon} />
             <TextInput
@@ -107,15 +128,36 @@ export default function RegisterScreen() {
           </View>
         </View>
 
+        {/* Phone with country picker */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Broj telefona * (sa pozivnim brojem)</Text>
+          <View style={styles.phoneRow}>
+            <CountryPicker selected={country} onSelect={setCountry} />
+            <View style={styles.phoneInputWrap}>
+              <Feather name="phone" size={18} color={Colors.muted} style={styles.inputIcon} />
+              <TextInput
+                testID="register-phone-input"
+                style={styles.inputFlex}
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="61 234 567"
+                placeholderTextColor={Colors.muted}
+                keyboardType="phone-pad"
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* PIN fields */}
         <View style={styles.row}>
           <View style={styles.halfField}>
-            <Text style={styles.label}>PIN</Text>
+            <Text style={styles.label}>PIN * (4 cifre)</Text>
             <TextInput
               testID="register-pin-input"
               style={styles.input}
               value={pin}
               onChangeText={(t) => setPin(t.replace(/[^0-9]/g, '').slice(0, 4))}
-              placeholder="4 cifre"
+              placeholder="• • • •"
               placeholderTextColor={Colors.muted}
               keyboardType="numeric"
               secureTextEntry
@@ -123,13 +165,13 @@ export default function RegisterScreen() {
             />
           </View>
           <View style={styles.halfField}>
-            <Text style={styles.label}>Potvrdi PIN</Text>
+            <Text style={styles.label}>Potvrdi PIN *</Text>
             <TextInput
               testID="register-confirm-pin-input"
               style={styles.input}
               value={confirmPin}
               onChangeText={(t) => setConfirmPin(t.replace(/[^0-9]/g, '').slice(0, 4))}
-              placeholder="Potvrdi"
+              placeholder="• • • •"
               placeholderTextColor={Colors.muted}
               keyboardType="numeric"
               secureTextEntry
@@ -146,14 +188,23 @@ export default function RegisterScreen() {
           onPress={handleRegister}
           disabled={loading}
         >
-          {loading ? (
-            <ActivityIndicator color={Colors.white} />
-          ) : (
+          {loading ? <ActivityIndicator color={Colors.white} /> : (
             <Text style={styles.primaryBtnText}>Kreiraj nalog</Text>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity testID="register-back-btn" onPress={() => router.back()}>
+        <View style={styles.separator}>
+          <View style={styles.separatorLine} />
+          <Text style={styles.separatorText}>ili</Text>
+          <View style={styles.separatorLine} />
+        </View>
+
+        <TouchableOpacity testID="register-google-btn" style={styles.googleBtn} onPress={handleGoogleSignIn}>
+          <Text style={styles.googleIcon}>G</Text>
+          <Text style={styles.googleBtnText}>Registruj se sa Google</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity testID="register-back-btn" onPress={() => router.back()} style={styles.backLink}>
           <Text style={styles.linkText}>Nazad na prijavu</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -168,18 +219,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 40,
   },
-  logo: { width: 140, height: 60, alignSelf: 'center', marginBottom: 24 },
+  logo: { width: 160, height: 70, alignSelf: 'center', marginBottom: 24 },
   title: {
     fontFamily: Fonts.heading,
     fontSize: Sizes.h2,
     color: Colors.foreground,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  phoneInfo: {
-    fontFamily: Fonts.bodySemiBold,
+  subtitle: {
+    fontFamily: Fonts.body,
     fontSize: Sizes.small,
-    color: Colors.primary,
+    color: Colors.muted,
     textAlign: 'center',
     marginBottom: 24,
   },
@@ -222,6 +273,20 @@ const styles = StyleSheet.create({
     color: Colors.foreground,
     paddingVertical: 14,
   },
+  phoneRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  phoneInputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.cardBg,
+    borderWidth: 1,
+    borderColor: Colors.inputBorder,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+  },
   error: {
     fontFamily: Fonts.body,
     fontSize: Sizes.small,
@@ -232,7 +297,7 @@ const styles = StyleSheet.create({
   primaryBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 9999,
-    height: 48,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
@@ -244,11 +309,47 @@ const styles = StyleSheet.create({
     fontSize: Sizes.body,
     color: Colors.white,
   },
+  separator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginVertical: 12,
+  },
+  separatorLine: { flex: 1, height: 1, backgroundColor: Colors.border },
+  separatorText: {
+    fontFamily: Fonts.body,
+    fontSize: Sizes.small,
+    color: Colors.muted,
+    marginHorizontal: 16,
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: 52,
+    backgroundColor: Colors.cardBg,
+    borderWidth: 1,
+    borderColor: Colors.inputBorder,
+    borderRadius: 9999,
+    gap: 10,
+    marginBottom: 12,
+  },
+  googleIcon: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#4285F4',
+  },
+  googleBtnText: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: Sizes.body,
+    color: Colors.foreground,
+  },
+  backLink: { paddingVertical: 8 },
   linkText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: Sizes.small,
     color: Colors.primary,
     textAlign: 'center',
-    paddingVertical: 8,
   },
 });

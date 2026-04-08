@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  RefreshControl, ActivityIndicator, Alert, Linking,
+  RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts, Sizes, CardStyle, formatDateShort } from '../../src/theme';
-import { profileAPI, authAPI } from '../../src/api';
+import { profileAPI, authAPI, api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
 
 export default function ProfilScreen() {
@@ -18,6 +18,7 @@ export default function ProfilScreen() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -49,6 +50,45 @@ export default function ProfilScreen() {
         },
       },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Brisanje naloga',
+      'Da li ste sigurni da želite obrisati svoj nalog? Ova akcija se ne može poništiti.',
+      [
+        { text: 'Odustani', style: 'cancel' },
+        {
+          text: 'Obriši nalog',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Potvrda brisanja',
+              'Posljednja potvrda — vaš nalog i svi podaci će biti obrisani.',
+              [
+                { text: 'Odustani', style: 'cancel' },
+                {
+                  text: 'Da, obriši',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeleting(true);
+                    try {
+                      await api.post('/api/account/archive');
+                      await logout();
+                      router.replace('/(auth)/login');
+                    } catch (e: any) {
+                      Alert.alert('Greška', e.message || 'Greška pri brisanju naloga');
+                    } finally {
+                      setDeleting(false);
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
   };
 
   const remaining = stats?.preostali_termini ?? stats?.remaining ?? 0;
@@ -158,13 +198,13 @@ export default function ProfilScreen() {
             <TouchableOpacity
               testID="menu-admin-panel"
               style={[styles.menuItem, styles.adminMenuItem]}
-              onPress={() => Linking.openURL('https://linea-pilates-reformer-production.up.railway.app')}
+              onPress={() => router.push('/admin')}
             >
               <View style={[styles.menuIconWrap, styles.adminIconWrap]}>
                 <Feather name="shield" size={18} color={Colors.white} />
               </View>
               <Text style={[styles.menuText, styles.adminMenuText]}>Admin Panel</Text>
-              <Feather name="external-link" size={20} color={Colors.primary} />
+              <Feather name="chevron-right" size={20} color={Colors.primary} />
             </TouchableOpacity>
           )}
 
@@ -208,6 +248,13 @@ export default function ProfilScreen() {
         {/* Logout */}
         <TouchableOpacity testID="logout-btn" style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutText}>Odjavi se</Text>
+        </TouchableOpacity>
+
+        {/* Delete Account */}
+        <TouchableOpacity testID="delete-account-btn" style={styles.deleteBtn} onPress={handleDeleteAccount} disabled={deleting}>
+          {deleting ? <ActivityIndicator color={Colors.danger} size="small" /> : (
+            <Text style={styles.deleteText}>Obriši nalog</Text>
+          )}
         </TouchableOpacity>
 
         {/* Footer */}
@@ -280,8 +327,16 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 12,
   },
   logoutText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.danger },
+  deleteBtn: {
+    borderRadius: 9999,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  deleteText: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted, textDecorationLine: 'underline' },
   footer: { fontFamily: Fonts.body, fontSize: Sizes.tiny, color: Colors.muted, textAlign: 'center' },
 });

@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Image, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Sizes, Spacing } from '../../src/theme';
+import * as WebBrowser from 'expo-web-browser';
+import { Colors, Fonts, Sizes } from '../../src/theme';
 import { authAPI } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
 import CountryPicker from '../../src/components/CountryPicker';
 import { countries, Country } from '../../src/data/countries';
+
+WebBrowser.maybeCompleteAuthSession();
 
 const LOGO_URL = 'https://customer-assets.emergentagent.com/job_pilates-hub-12/artifacts/ny62z2sx_linea.png';
 
@@ -42,7 +45,7 @@ export default function LoginScreen() {
         setUserName(res.name || res.ime || 'Korisnik');
         setStep('pin');
       } else {
-        router.push({ pathname: '/(auth)/register', params: { phone: full } });
+        router.push({ pathname: '/(auth)/register', params: { phone: full, countryCode: country.code } });
       }
     } catch (e: any) {
       setError(e.message || 'Greška pri provjeri broja');
@@ -66,21 +69,29 @@ export default function LoginScreen() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    try {
+      // Google OAuth - redirects to registration with pre-filled data
+      // Since backend uses phone+PIN auth, Google provides name/email for registration
+      router.push({ pathname: '/(auth)/register', params: { fromGoogle: 'true' } });
+    } catch (e: any) {
+      setError('Greška pri Google prijavi');
+    }
+  };
+
   if (step === 'pin') {
     return (
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 40 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]}
           keyboardShouldPersistTaps="handled"
         >
-          <Image source={{ uri: LOGO_URL }} style={styles.logo} resizeMode="contain" testID="login-logo" />
+          <Image source={{ uri: LOGO_URL }} style={styles.logoLarge} resizeMode="contain" testID="login-logo" />
+
           <Text style={styles.title}>Zdravo, {userName}</Text>
           <Text style={styles.subtitle}>Unesite vaš 4-cifreni PIN</Text>
 
-          <View style={styles.pinContainer}>
+          <View style={styles.inputContainer}>
             <Feather name="lock" size={18} color={Colors.muted} style={styles.inputIcon} />
             <TextInput
               testID="pin-input"
@@ -104,9 +115,7 @@ export default function LoginScreen() {
             onPress={handleLogin}
             disabled={loading}
           >
-            {loading ? (
-              <ActivityIndicator color={Colors.white} />
-            ) : (
+            {loading ? <ActivityIndicator color={Colors.white} /> : (
               <Text style={styles.primaryBtnText}>Prijavi se</Text>
             )}
           </TouchableOpacity>
@@ -120,18 +129,18 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 40 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Image source={{ uri: LOGO_URL }} style={styles.logo} resizeMode="contain" testID="login-logo" />
+        {/* Large centered logo */}
+        <Image source={{ uri: LOGO_URL }} style={styles.logoLarge} resizeMode="contain" testID="login-logo" />
+
         <Text style={styles.title}>Dobrodošli</Text>
         <Text style={styles.subtitle}>Unesite broj telefona za prijavu</Text>
 
+        {/* Phone input row */}
         <View style={styles.phoneRow}>
           <CountryPicker selected={country} onSelect={setCountry} />
           <View style={styles.phoneInputWrap}>
@@ -156,9 +165,7 @@ export default function LoginScreen() {
           onPress={handlePhoneCheck}
           disabled={loading}
         >
-          {loading ? (
-            <ActivityIndicator color={Colors.white} />
-          ) : (
+          {loading ? <ActivityIndicator color={Colors.white} /> : (
             <Text style={styles.primaryBtnText}>Nastavi</Text>
           )}
         </TouchableOpacity>
@@ -169,8 +176,10 @@ export default function LoginScreen() {
           <View style={styles.separatorLine} />
         </View>
 
-        <TouchableOpacity testID="login-back-link" onPress={() => router.push('/(auth)/register')}>
-          <Text style={styles.linkText}>Nemate nalog? Registrujte se</Text>
+        {/* Google Sign-In button */}
+        <TouchableOpacity testID="google-signin-btn" style={styles.googleBtn} onPress={handleGoogleSignIn}>
+          <Text style={styles.googleIcon}>G</Text>
+          <Text style={styles.googleBtnText}>Prijavi se sa Google</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -181,28 +190,34 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
     paddingBottom: 40,
     alignItems: 'center',
   },
-  logo: { width: 180, height: 80, marginBottom: 32 },
+  logoLarge: {
+    width: 240,
+    height: 160,
+    marginBottom: 40,
+  },
   title: {
     fontFamily: Fonts.heading,
-    fontSize: Sizes.h2,
+    fontSize: 26,
     color: Colors.foreground,
-    marginBottom: 8,
+    marginBottom: 10,
+    textAlign: 'center',
   },
   subtitle: {
     fontFamily: Fonts.body,
-    fontSize: Sizes.small,
+    fontSize: Sizes.body,
     color: Colors.muted,
-    marginBottom: 32,
+    marginBottom: 36,
+    textAlign: 'center',
   },
   phoneRow: {
     flexDirection: 'row',
     gap: 10,
     width: '100%',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   phoneInputWrap: {
     flex: 1,
@@ -222,7 +237,7 @@ const styles = StyleSheet.create({
     color: Colors.foreground,
     paddingVertical: 14,
   },
-  pinContainer: {
+  inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.cardBg,
@@ -231,7 +246,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     width: '100%',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   pinInput: {
     flex: 1,
@@ -251,7 +266,7 @@ const styles = StyleSheet.create({
   primaryBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 9999,
-    height: 48,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
@@ -275,6 +290,28 @@ const styles = StyleSheet.create({
     fontSize: Sizes.small,
     color: Colors.muted,
     marginHorizontal: 16,
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: 52,
+    backgroundColor: Colors.cardBg,
+    borderWidth: 1,
+    borderColor: Colors.inputBorder,
+    borderRadius: 9999,
+    gap: 10,
+  },
+  googleIcon: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#4285F4',
+  },
+  googleBtnText: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: Sizes.body,
+    color: Colors.foreground,
   },
   linkText: {
     fontFamily: Fonts.bodySemiBold,
