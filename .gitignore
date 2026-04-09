@@ -81,35 +81,19 @@ memory/test_credentials.md
 # Mobile development
 android-sdk/-e 
 # Environment files
-*.env
-*.env.*
 -e 
 # Environment files
-*.env
-*.env.*
 -e 
 # Environment files
-*.env
-*.env.*
 -e 
 # Environment files
-*.env
-*.env.*
 -e 
 # Environment files
-*.env
-*.env.*
 -e 
 # Environment files
-*.env
-*.env.*
 frontend/.metro-cache*
 .metro-cache/
 -e 
 # Environment files
-*.env
-*.env.*
 -e 
 # Environment files
-*.env
-*.env.*
