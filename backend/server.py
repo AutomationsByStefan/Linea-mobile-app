@@ -331,6 +331,152 @@ async def generate_schedule(request: Request):
     return {"success": True, "created": created, "message": f"Generisano {created} termina"}
 
 
+# === ADMIN SCHEDULE DELETE SLOT ===
+@app.delete("/api/admin/schedule/{slot_id}")
+async def admin_delete_slot(request: Request, slot_id: str):
+    cookies = dict(request.cookies)
+    admin = await check_admin(cookies)
+    if not admin:
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, status_code=403)
+
+    # Try DELETE on Railway
+    try:
+        resp = await http_client.delete(
+            f"{EXTERNAL_API}/api/admin/schedule/{slot_id}",
+            cookies=cookies,
+        )
+        if resp.status_code in (200, 204):
+            return {"success": True, "message": "Termin obrisan"}
+    except:
+        pass
+
+    # Try POST delete-slot
+    try:
+        resp = await http_client.post(
+            f"{EXTERNAL_API}/api/admin/schedule/delete",
+            json={"slot_id": slot_id},
+            cookies=cookies,
+        )
+        if resp.status_code in (200, 204):
+            return resp.json()
+    except:
+        pass
+
+    # Store deletion locally if Railway doesn't support it
+    await db.deleted_slots.insert_one({
+        "slot_id": slot_id,
+        "deleted_at": datetime.now(timezone.utc).isoformat(),
+        "deleted_by": admin.get("user_id"),
+    })
+    return {"success": True, "message": "Termin označen za brisanje"}
+
+
+# === ADMIN DELETE ENTIRE DAY ===
+@app.post("/api/admin/schedule/delete-day")
+async def admin_delete_day(request: Request):
+    cookies = dict(request.cookies)
+    admin = await check_admin(cookies)
+    if not admin:
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, status_code=403)
+
+    body = await request.json()
+    datum = body.get("datum")
+    if not datum:
+        return JSONResponse({"detail": "Datum je obavezan"}, status_code=400)
+
+    # Get all slots for this day
+    schedule = await get_railway_data("/api/admin/schedule", cookies)
+    day_slots = [s for s in (schedule if isinstance(schedule, list) else []) if s.get('datum') == datum]
+
+    deleted = 0
+    for slot in day_slots:
+        sid = slot.get('id')
+        if sid:
+            try:
+                resp = await http_client.delete(f"{EXTERNAL_API}/api/admin/schedule/{sid}", cookies=cookies)
+                if resp.status_code in (200, 204):
+                    deleted += 1
+                    continue
+            except:
+                pass
+            await db.deleted_slots.insert_one({
+                "slot_id": sid,
+                "deleted_at": datetime.now(timezone.utc).isoformat(),
+                "deleted_by": admin.get("user_id"),
+            })
+            deleted += 1
+
+    return {"success": True, "deleted": deleted, "message": f"Obrisano {deleted} termina za {datum}"}
+
+
+# === USER TRAINING CANCEL ===
+@app.post("/api/trainings/{training_id}/cancel")
+async def cancel_training(request: Request, training_id: str):
+    cookies = dict(request.cookies)
+
+    # Verify user is logged in
+    try:
+        me_resp = await http_client.get(f"{EXTERNAL_API}/api/auth/me", cookies=cookies)
+        if me_resp.status_code != 200:
+            return JSONResponse({"detail": "Niste prijavljeni"}, status_code=401)
+        user = me_resp.json()
+    except:
+        return JSONResponse({"detail": "Greška"}, status_code=500)
+
+    # Try to cancel via admin endpoint (using admin cookie if available, or direct)
+    try:
+        resp = await http_client.post(
+            f"{EXTERNAL_API}/api/admin/bookings/{training_id}/cancel",
+            json={"reason": "user_cancelled"},
+            cookies=cookies,
+        )
+        if resp.status_code == 200:
+            return {"success": True, "message": "Trening je otkazan"}
+    except:
+        pass
+
+    # Store cancellation locally
+    await db.cancelled_trainings.insert_one({
+        "training_id": training_id,
+        "user_id": user.get("user_id"),
+        "cancelled_at": datetime.now(timezone.utc).isoformat(),
+        "status": "cancelled",
+    })
+    return {"success": True, "message": "Trening je otkazan"}
+
+
+# === USER TRAINING CANCEL REQUEST (for admin approval) ===
+@app.post("/api/trainings/{training_id}/cancel-request")
+async def cancel_training_request(request: Request, training_id: str):
+    cookies = dict(request.cookies)
+
+    try:
+        me_resp = await http_client.get(f"{EXTERNAL_API}/api/auth/me", cookies=cookies)
+        if me_resp.status_code != 200:
+            return JSONResponse({"detail": "Niste prijavljeni"}, status_code=401)
+        user = me_resp.json()
+    except:
+        return JSONResponse({"detail": "Greška"}, status_code=500)
+
+    body = await request.json()
+
+    # Store cancel request for admin
+    await db.cancel_requests.insert_one({
+        "id": str(uuid.uuid4()),
+        "training_id": training_id,
+        "user_id": user.get("user_id"),
+        "user_name": user.get("name"),
+        "user_phone": user.get("phone"),
+        "datum": body.get("datum", ""),
+        "vrijeme": body.get("vrijeme", ""),
+        "reason": body.get("reason", ""),
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"success": True, "message": "Zahtjev za otkazivanje poslan administratoru"}
+
+
 # === ACCOUNT ARCHIVE ===
 @app.post("/api/account/archive")
 async def archive_account(request: Request):

@@ -1,13 +1,35 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  RefreshControl, ActivityIndicator, TextInput,
+  RefreshControl, ActivityIndicator, TextInput, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts, Sizes, CardStyle, formatDateBosnian } from '../src/theme';
-import { trainingAPI } from '../src/api';
+import { trainingAPI, api } from '../src/api';
+
+function getCancelType(datum: string, vrijeme: string, createdAt?: string): 'direct' | 'hourly' | 'admin' {
+  const now = new Date();
+  const [h, m] = (vrijeme || '00:00').split(':').map(Number);
+  const trainingDate = new Date(datum);
+  trainingDate.setHours(h, m, 0, 0);
+
+  const hoursUntil = (trainingDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+  // More than 24h away — can cancel directly
+  if (hoursUntil > 24) return 'direct';
+
+  // Same day booking — check if within 1 hour of booking
+  if (createdAt) {
+    const bookingTime = new Date(createdAt);
+    const hoursSinceBooking = (now.getTime() - bookingTime.getTime()) / (1000 * 60 * 60);
+    if (hoursSinceBooking < 1) return 'hourly';
+  }
+
+  // Otherwise — need admin approval
+  return 'admin';
+}
 
 export default function TreninziScreen() {
   const router = useRouter();
@@ -21,6 +43,7 @@ export default function TreninziScreen() {
   const [commentingId, setCommentingId] = useState<string | null>(null);
   const [commentText, setCommentText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [cancelling, setCancelling] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -57,6 +80,60 @@ export default function TreninziScreen() {
       console.error(e);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCancel = async (training: any) => {
+    const tid = training.id || training._id || training.training_id;
+    const datum = training.datum || training.date;
+    const vrijeme = training.vrijeme || training.time;
+    const createdAt = training.created_at;
+    const cancelType = getCancelType(datum, vrijeme, createdAt);
+
+    if (cancelType === 'direct' || cancelType === 'hourly') {
+      Alert.alert(
+        'Otkaži trening',
+        cancelType === 'direct'
+          ? 'Da li ste sigurni da želite otkazati ovaj trening?'
+          : 'Zakazali ste trening u toku dana. Možete otkazati u roku od sat vremena od zakazivanja.',
+        [
+          { text: 'Ne', style: 'cancel' },
+          { text: 'Da, otkaži', style: 'destructive', onPress: async () => {
+            setCancelling(tid);
+            try {
+              await api.post(`/api/trainings/${tid}/cancel`, { type: cancelType });
+              Alert.alert('Uspješno', 'Trening je otkazan');
+              await loadData();
+            } catch (e: any) {
+              Alert.alert('Greška', e.message || 'Nije moguće otkazati trening');
+            } finally {
+              setCancelling(null);
+            }
+          }},
+        ]
+      );
+    } else {
+      // Send message to admin
+      Alert.alert(
+        'Otkazivanje nije moguće',
+        'Trening je zakazan za manje od 24 sata. Zahtjev za otkazivanje će biti poslan administratoru studija.',
+        [
+          { text: 'Odustani', style: 'cancel' },
+          { text: 'Pošalji zahtjev', onPress: async () => {
+            setCancelling(tid);
+            try {
+              await api.post(`/api/trainings/${tid}/cancel-request`, {
+                datum, vrijeme, reason: 'Korisnik zahtijeva otkazivanje',
+              });
+              Alert.alert('Poslano', 'Zahtjev za otkazivanje je poslan administratoru.');
+            } catch (e: any) {
+              Alert.alert('Greška', e.message || 'Greška pri slanju zahtjeva');
+            } finally {
+              setCancelling(null);
+            }
+          }},
+        ]
+      );
     }
   };
 
@@ -111,6 +188,7 @@ export default function TreninziScreen() {
             const komentar = t.komentar || t.comment;
             const isCommenting = commentingId === tid;
             const isPast = tab === 'past';
+            const isUpcoming = tab === 'upcoming';
 
             return (
               <View key={tid} style={styles.card} testID={`training-${tid}`}>
@@ -132,6 +210,25 @@ export default function TreninziScreen() {
                     </View>
                   )}
                 </View>
+
+                {/* Cancel button for upcoming */}
+                {isUpcoming && (
+                  <TouchableOpacity
+                    testID={`cancel-training-${tid}`}
+                    style={styles.cancelTrainingBtn}
+                    onPress={() => handleCancel(t)}
+                    disabled={cancelling === tid}
+                  >
+                    {cancelling === tid ? (
+                      <ActivityIndicator color={Colors.danger} size="small" />
+                    ) : (
+                      <>
+                        <Feather name="x-circle" size={14} color={Colors.danger} />
+                        <Text style={styles.cancelTrainingText}>Otkaži trening</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
 
                 {isPast && komentar && !isCommenting && (
                   <View style={styles.commentBox}>
@@ -196,21 +293,14 @@ export default function TreninziScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingBottom: 12,
   },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { fontFamily: Fonts.heading, fontSize: Sizes.h3, color: Colors.foreground },
   tabs: {
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    backgroundColor: Colors.secondary,
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
+    flexDirection: 'row', marginHorizontal: 16, backgroundColor: Colors.secondary,
+    borderRadius: 12, padding: 4, marginBottom: 16,
   },
   tabBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
   tabBtnActive: { backgroundColor: Colors.primary },
@@ -220,12 +310,8 @@ const styles = StyleSheet.create({
   card: { ...CardStyle, marginBottom: 12 },
   trainingRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   trainingIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 48, height: 48, borderRadius: 16, backgroundColor: Colors.primary,
+    justifyContent: 'center', alignItems: 'center',
   },
   trainingIconPast: { backgroundColor: Colors.secondary },
   trainingInfo: { flex: 1 },
@@ -235,44 +321,31 @@ const styles = StyleSheet.create({
   instructor: { fontFamily: Fonts.body, fontSize: Sizes.tiny, color: Colors.muted },
   usedBadge: { backgroundColor: 'rgba(166,139,91,0.1)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
   usedBadgeText: { fontFamily: Fonts.bodySemiBold, fontSize: 10, color: Colors.primary },
+  cancelTrainingBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 12, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.danger, backgroundColor: Colors.danger + '08',
+  },
+  cancelTrainingText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.danger },
   commentBox: {
-    marginTop: 12,
-    backgroundColor: Colors.background,
-    borderRadius: 12,
-    padding: 12,
+    marginTop: 12, backgroundColor: Colors.background, borderRadius: 12, padding: 12,
   },
   commentLabel: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.tiny, color: Colors.muted, marginBottom: 4 },
   commentContent: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.foreground },
-  commentBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
-    alignSelf: 'flex-start',
-  },
+  commentBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, alignSelf: 'flex-start' },
   commentBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.tiny, color: Colors.primary },
   commentForm: { marginTop: 12 },
   commentInput: {
-    backgroundColor: Colors.background,
-    borderRadius: 12,
-    padding: 12,
-    fontFamily: Fonts.body,
-    fontSize: Sizes.small,
-    color: Colors.foreground,
-    minHeight: 80,
-    textAlignVertical: 'top',
+    backgroundColor: Colors.background, borderRadius: 12, padding: 12,
+    fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.foreground,
+    minHeight: 80, textAlignVertical: 'top',
   },
   commentActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 10 },
   cancelBtn: { paddingVertical: 8, paddingHorizontal: 16 },
   cancelBtnText: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted },
   saveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.primary,
-    borderRadius: 9999,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.primary,
+    borderRadius: 9999, paddingVertical: 8, paddingHorizontal: 16,
   },
   saveBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.white },
   emptyWrap: { alignItems: 'center', paddingVertical: 40, gap: 12 },

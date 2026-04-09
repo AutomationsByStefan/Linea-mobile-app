@@ -18,8 +18,10 @@ WebBrowser.maybeCompleteAuthSession();
 
 const LOGO_URL = 'https://customer-assets.emergentagent.com/job_pilates-hub-12/artifacts/ny62z2sx_linea.png';
 
-// Google OAuth config — set your Client ID from Google Cloud Console
-const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '';
+// Google OAuth config — platform-specific Client IDs
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID || '';
+const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS || '';
+const GOOGLE_CLIENT_ID = Platform.OS === 'ios' ? GOOGLE_IOS_CLIENT_ID : GOOGLE_WEB_CLIENT_ID;
 
 const discovery = {
   authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -45,7 +47,7 @@ export default function LoginScreen() {
   const redirectUri = AuthSession.makeRedirectUri({ preferLocalhost: false });
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
-      clientId: GOOGLE_WEB_CLIENT_ID,
+      clientId: GOOGLE_CLIENT_ID,
       scopes: ['profile', 'email'],
       redirectUri,
       responseType: AuthSession.ResponseType.Token,
@@ -133,7 +135,7 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
-    if (!GOOGLE_WEB_CLIENT_ID) {
+    if (!GOOGLE_CLIENT_ID) {
       Alert.alert(
         'Google prijava',
         'Za korištenje Google prijave potrebno je konfigurisati Google OAuth Client ID.\n\nKontaktirajte administratora studija.',
@@ -142,7 +144,7 @@ export default function LoginScreen() {
     }
     setGoogleLoading(true);
     setError('');
-    await promptAsync();
+    promptAsync();
   };
 
   if (step === 'pin') {

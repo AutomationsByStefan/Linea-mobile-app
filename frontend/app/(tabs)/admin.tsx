@@ -345,8 +345,26 @@ function ScheduleSection() {
   };
 
   const deleteSlot = async (id: string) => {
-    try { await api.delete(`/api/admin/schedule/${id}`); await load(); }
-    catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+    Alert.alert('Obriši termin', 'Da li ste sigurni?', [
+      { text: 'Ne', style: 'cancel' },
+      { text: 'Da, obriši', style: 'destructive', onPress: async () => {
+        try { await api.delete(`/api/admin/schedule/${id}`); await load(); }
+        catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+      }},
+    ]);
+  };
+
+  const deleteDay = async (datum: string) => {
+    Alert.alert('Obriši cijeli dan', `Obrisati sve termine za ${datum}?`, [
+      { text: 'Ne', style: 'cancel' },
+      { text: 'Da, obriši dan', style: 'destructive', onPress: async () => {
+        try {
+          const res = await api.post('/api/admin/schedule/delete-day', { datum });
+          Alert.alert('Obrisano', res.message || 'Dan obrisan');
+          await load();
+        } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+      }},
+    ]);
   };
 
   if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
@@ -368,7 +386,13 @@ function ScheduleSection() {
 
       {dates.map(date => (
         <View key={date} style={s.scheduleDay}>
-          <Text style={s.scheduleDateLabel}>{date}</Text>
+          <View style={s.scheduleDayHeader}>
+            <Text style={s.scheduleDateLabel}>{date}</Text>
+            <TouchableOpacity testID={`delete-day-${date}`} style={s.deleteDayBtn} onPress={() => deleteDay(date)}>
+              <Feather name="trash-2" size={12} color={Colors.danger} />
+              <Text style={s.deleteDayText}>Obriši dan</Text>
+            </TouchableOpacity>
+          </View>
           <View style={s.slotGrid}>
             {grouped[date].sort((a: any, b: any) => a.vrijeme.localeCompare(b.vrijeme)).map((sl: any) => (
               <View key={sl.id} style={s.slotCard} testID={`admin-slot-${sl.id}`}>
@@ -767,7 +791,10 @@ const s = StyleSheet.create({
   finPkgPrice: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.primary },
   // Schedule
   scheduleDay: { marginBottom: 20 },
-  scheduleDateLabel: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.foreground, backgroundColor: Colors.secondary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginBottom: 10, overflow: 'hidden' },
+  scheduleDayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  scheduleDateLabel: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.foreground, backgroundColor: Colors.secondary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, overflow: 'hidden' },
+  deleteDayBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.danger },
+  deleteDayText: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: Colors.danger },
   slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   slotCard: { width: '48%', backgroundColor: Colors.cardBg, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, padding: 10 },
   slotHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
