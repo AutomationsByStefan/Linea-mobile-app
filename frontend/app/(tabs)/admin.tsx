@@ -9,7 +9,7 @@ import { Colors, Fonts, Sizes, CardStyle, formatDateShort } from '../../src/them
 import { api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
 
-type Section = 'dashboard' | 'schedule' | 'bookings' | 'users';
+type Section = 'dashboard' | 'finance' | 'schedule' | 'bookings' | 'users';
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();
@@ -27,6 +27,7 @@ export default function AdminScreen() {
 
   const tabs: { key: Section; label: string; icon: string }[] = [
     { key: 'dashboard', label: 'Kontrolna', icon: 'grid' },
+    { key: 'finance', label: 'Finansije', icon: 'dollar-sign' },
     { key: 'schedule', label: 'Raspored', icon: 'calendar' },
     { key: 'bookings', label: 'Rezervacije', icon: 'book-open' },
     { key: 'users', label: 'Korisnici', icon: 'users' },
@@ -34,7 +35,6 @@ export default function AdminScreen() {
 
   return (
     <View style={s.flex}>
-      {/* Top Tab Bar */}
       <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
         <Text style={s.topTitle}>Admin Panel</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabRow}>
@@ -53,6 +53,7 @@ export default function AdminScreen() {
       </View>
 
       {section === 'dashboard' && <DashboardSection />}
+      {section === 'finance' && <FinanceSection />}
       {section === 'schedule' && <ScheduleSection />}
       {section === 'bookings' && <BookingsSection />}
       {section === 'users' && <UsersSection />}
@@ -311,6 +312,298 @@ function DashboardSection() {
               <TouchableOpacity style={s.modalBtnConfirm} onPress={addManualIncome}>
                 <Text style={s.modalBtnConfirmText}>Sačuvaj</Text>
               </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </ScrollView>
+  );
+}
+
+// ============= FINANCE & ANALYTICS =============
+const MONTH_NAMES: Record<string, string> = {
+  '01': 'Januar', '02': 'Februar', '03': 'Mart', '04': 'April', '05': 'Maj', '06': 'Juni',
+  '07': 'Juli', '08': 'August', '09': 'Septembar', '10': 'Oktobar', '11': 'Novembar', '12': 'Decembar',
+};
+
+function FinanceSection() {
+  const [finance, setFinance] = useState<any>(null);
+  const [slotAnalytics, setSlotAnalytics] = useState<any>(null);
+  const [clientAnalytics, setClientAnalytics] = useState<any>(null);
+  const [warnings, setWarnings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<any>(null);
+  const [showManual, setShowManual] = useState(false);
+  const [showWarnings, setShowWarnings] = useState(false);
+  const [manualAmt, setManualAmt] = useState('');
+  const [manualDesc, setManualDesc] = useState('');
+  const [manualCat, setManualCat] = useState('Ostalo');
+  const [subSection, setSubSection] = useState<'finance' | 'slots' | 'clients'>('finance');
+
+  const load = useCallback(async () => {
+    try {
+      const [f, sa, ca, w] = await Promise.allSettled([
+        api.get('/api/admin/finance'),
+        api.get('/api/admin/analytics/slots'),
+        api.get('/api/admin/analytics/clients'),
+        api.get('/api/admin/warnings'),
+      ]);
+      if (f.status === 'fulfilled') setFinance(f.value);
+      if (sa.status === 'fulfilled') setSlotAnalytics(sa.value);
+      if (ca.status === 'fulfilled') setClientAnalytics(ca.value);
+      if (w.status === 'fulfilled') setWarnings(Array.isArray(w.value) ? w.value : []);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+
+  const addManual = async () => {
+    const amt = parseFloat(manualAmt);
+    if (isNaN(amt) || amt <= 0) { Alert.alert('Greška', 'Unesite iznos'); return; }
+    try {
+      await api.post('/api/admin/finance/manual', { amount: amt, description: manualDesc, category: manualCat });
+      setShowManual(false); setManualAmt(''); setManualDesc('');
+      await load();
+    } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+  };
+
+  if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
+
+  const months = finance?.months || [];
+
+  return (
+    <ScrollView style={s.flex} contentContainerStyle={s.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}>
+
+      {/* Sub-section tabs */}
+      <View style={s.subTabs}>
+        {[
+          { key: 'finance', label: 'Finansije', icon: 'dollar-sign' },
+          { key: 'slots', label: 'Statistika termina', icon: 'bar-chart-2' },
+          { key: 'clients', label: 'Klijenti', icon: 'users' },
+        ].map((t: any) => (
+          <TouchableOpacity key={t.key} style={[s.subTab, subSection === t.key && s.subTabActive]}
+            onPress={() => setSubSection(t.key)}>
+            <Feather name={t.icon} size={14} color={subSection === t.key ? Colors.white : Colors.primary} />
+            <Text style={[s.subTabText, subSection === t.key && s.subTabTextActive]}>{t.label}</Text>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity style={[s.subTab, { backgroundColor: warnings.length > 0 ? '#DC354520' : Colors.secondary }]}
+          onPress={() => setShowWarnings(true)}>
+          <Feather name="alert-triangle" size={14} color={warnings.length > 0 ? Colors.danger : Colors.muted} />
+          {warnings.length > 0 && <View style={s.warningDot}><Text style={s.warningDotText}>{warnings.length}</Text></View>}
+        </TouchableOpacity>
+      </View>
+
+      {/* === FINANSIJE === */}
+      {subSection === 'finance' && (
+        <>
+          <View style={s.cardHeader}>
+            <Text style={s.sectionTitle}>Finansije</Text>
+            <TouchableOpacity style={s.goldBtn} onPress={() => setShowManual(true)}>
+              <Feather name="plus" size={14} color={Colors.white} /><Text style={s.goldBtnText}>Ručni prihod</Text>
+            </TouchableOpacity>
+          </View>
+          {months.map((m: any, i: number) => {
+            const [yr, mn] = m.month.split('-');
+            const prevMonth = months[i + 1];
+            const change = prevMonth ? ((m.total - prevMonth.total) / (prevMonth.total || 1) * 100) : 0;
+            const manualTotal = (m.manual || []).reduce((a: number, x: any) => a + (x.amount || 0), 0);
+            const pkgTotal = m.total - manualTotal;
+            const isSelected = selectedMonth?.month === m.month;
+
+            return (
+              <TouchableOpacity key={m.month} style={s.card} onPress={() => setSelectedMonth(isSelected ? null : m)}
+                testID={`month-card-${m.month}`}>
+                <View style={s.monthHeader}>
+                  <View>
+                    <Text style={s.monthName}>{MONTH_NAMES[mn] || mn} {yr}</Text>
+                    <Text style={s.monthTotal}>{m.total} KM</Text>
+                  </View>
+                  {prevMonth && (
+                    <View style={[s.changeBadge, { backgroundColor: change >= 0 ? '#05966920' : '#DC354520' }]}>
+                      <Feather name={change >= 0 ? 'trending-up' : 'trending-down'} size={12}
+                        color={change >= 0 ? '#059669' : Colors.danger} />
+                      <Text style={[s.changeText, { color: change >= 0 ? '#059669' : Colors.danger }]}>
+                        {change >= 0 ? '+' : ''}{change.toFixed(0)}%
+                      </Text>
+                    </View>
+                  )}
+                  <Feather name={isSelected ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.muted} />
+                </View>
+
+                {isSelected && (
+                  <View style={s.monthDetail}>
+                    <View style={s.financeRow}>
+                      <View style={s.finBox}><Text style={s.finLabel}>Paketi</Text><Text style={s.finValue}>{pkgTotal} KM</Text></View>
+                      <View style={s.finBox}><Text style={s.finLabel}>Ručno</Text><Text style={s.finValue}>{manualTotal} KM</Text></View>
+                    </View>
+                    <Text style={s.detailLabel}>Paketi</Text>
+                    {Object.entries(m.packages || {}).map(([name, data]: any) => (
+                      <View key={name} style={s.detailRow}>
+                        <Text style={s.userName}>{name}</Text>
+                        <Text style={s.userSub}>{data.count}x prodano</Text>
+                        <Text style={s.finPkgPrice}>{data.total} KM</Text>
+                      </View>
+                    ))}
+                    {(m.manual || []).length > 0 && (
+                      <>
+                        <Text style={[s.detailLabel, { marginTop: 12 }]}>Ručni prihodi</Text>
+                        {m.manual.map((mi: any) => (
+                          <View key={mi.id} style={s.detailRow}>
+                            <Text style={s.userName}>{mi.description || '-'}</Text>
+                            <Text style={s.userSub}>{mi.category} • {mi.date}</Text>
+                            <Text style={s.finPkgPrice}>{mi.amount} KM</Text>
+                          </View>
+                        ))}
+                      </>
+                    )}
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+          {months.length === 0 && <Text style={s.emptyText}>Nema finansijskih podataka</Text>}
+        </>
+      )}
+
+      {/* === STATISTIKA TERMINA === */}
+      {subSection === 'slots' && slotAnalytics && (
+        <>
+          <Text style={s.sectionTitle}>Statistika termina</Text>
+          <View style={s.statsRow}>
+            <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.avg_occupancy}%</Text><Text style={s.miniStatLabel}>Prosječna popunjenost</Text></View>
+            <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.total_bookings}</Text><Text style={s.miniStatLabel}>Ukupno rezervacija</Text></View>
+            <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.cancellations}</Text><Text style={s.miniStatLabel}>Otkazivanja</Text></View>
+          </View>
+
+          <View style={s.card}>
+            <Text style={s.cardTitle}>Najpopularniji dani</Text>
+            {(slotAnalytics.day_popularity || []).map((d: any) => (
+              <View key={d.day} style={s.barRow}>
+                <Text style={s.barLabel}>{d.day}</Text>
+                <View style={s.barBg}><View style={[s.barFill, { width: `${Math.max(d.percentage, 2)}%` }]} /></View>
+                <Text style={s.barValue}>{d.percentage}%</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={s.card}>
+            <Text style={s.cardTitle}>Popunjenost po terminima</Text>
+            {(slotAnalytics.time_ranking || []).map((t: any) => (
+              <View key={t.time} style={s.barRow}>
+                <Text style={s.barLabel}>{t.time}</Text>
+                <View style={s.barBg}><View style={[s.barFill, { width: `${Math.max(t.occupancy, 2)}%` }]} /></View>
+                <Text style={s.barValue}>{t.occupancy}%</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
+
+      {/* === KLIJENTI STATISTIKA === */}
+      {subSection === 'clients' && clientAnalytics && (
+        <>
+          <Text style={s.sectionTitle}>Klijenti statistika</Text>
+          <View style={s.statsRow}>
+            <View style={s.miniStat}><Text style={[s.miniStatValue, { color: '#059669' }]}>{clientAnalytics.active_clients}</Text><Text style={s.miniStatLabel}>Aktivni</Text></View>
+            <View style={s.miniStat}><Text style={[s.miniStatValue, { color: Colors.danger }]}>{clientAnalytics.inactive_clients}</Text><Text style={s.miniStatLabel}>Neaktivni</Text></View>
+            <View style={s.miniStat}><Text style={s.miniStatValue}>{clientAnalytics.total_clients}</Text><Text style={s.miniStatLabel}>Ukupno</Text></View>
+          </View>
+
+          <View style={s.card}>
+            <Text style={s.cardTitle}>Novi klijenti</Text>
+            <View style={s.compareRow}>
+              <View style={s.compareBox}>
+                <Text style={s.compareValue}>{clientAnalytics.new_this_month}</Text>
+                <Text style={s.compareLabel}>Ovaj mjesec</Text>
+              </View>
+              <Feather name="arrow-right" size={16} color={Colors.muted} />
+              <View style={s.compareBox}>
+                <Text style={s.compareValue}>{clientAnalytics.new_last_month}</Text>
+                <Text style={s.compareLabel}>Prošli mjesec</Text>
+              </View>
+            </View>
+          </View>
+
+          {(clientAnalytics.package_retention || []).length > 0 && (
+            <View style={s.card}>
+              <Text style={s.cardTitle}>Retencija po paketu</Text>
+              {clientAnalytics.package_retention.map((r: any) => (
+                <View key={r.package} style={s.detailRow}>
+                  <Text style={s.userName}>{r.package}</Text>
+                  <Text style={s.userSub}>{r.renewed}/{r.total} obnovilo</Text>
+                  <Text style={[s.finPkgPrice, { color: r.rate > 50 ? '#059669' : Colors.primary }]}>{r.rate}%</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {(clientAnalytics.inactive_30_days || []).length > 0 && (
+            <View style={s.card}>
+              <Text style={s.cardTitle}>Neaktivni 30+ dana</Text>
+              {clientAnalytics.inactive_30_days.map((u: any, i: number) => (
+                <View key={i} style={s.detailRow}>
+                  <Text style={s.userName}>{u.name}</Text>
+                  <Text style={s.userSub}>{u.phone}</Text>
+                  <Text style={[s.finPkgPrice, { color: Colors.danger }]}>{u.days} dana</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </>
+      )}
+
+      {/* Warnings Modal */}
+      <Modal visible={showWarnings} transparent animationType="slide">
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Upozorenja ({warnings.length})</Text>
+              <TouchableOpacity onPress={() => setShowWarnings(false)}><Feather name="x" size={22} color={Colors.foreground} /></TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 400 }}>
+              {warnings.length === 0 ? <Text style={s.emptyText}>Nema upozorenja</Text> :
+                warnings.map((w: any, i: number) => (
+                  <View key={i} style={s.warningRow}>
+                    <Feather name={w.type === 'no_sessions' ? 'alert-circle' : w.type === 'expiring' ? 'clock' : 'user-x'} size={16}
+                      color={w.severity === 'high' ? Colors.danger : w.severity === 'medium' ? '#D97706' : Colors.muted} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.userName}>{w.name}</Text>
+                      <Text style={[s.userSub, { color: w.severity === 'high' ? Colors.danger : Colors.muted }]}>{w.message}</Text>
+                    </View>
+                    <Text style={s.userSub}>{w.phone}</Text>
+                  </View>
+                ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Manual Income Modal */}
+      <Modal visible={showManual} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <Text style={s.modalTitle}>Ručni prihod</Text>
+            <TextInput style={s.modalInput} placeholder="Iznos (KM)" placeholderTextColor={Colors.muted}
+              value={manualAmt} onChangeText={setManualAmt} keyboardType="decimal-pad" />
+            <TextInput style={s.modalInput} placeholder="Opis (npr. Prodaja opreme)" placeholderTextColor={Colors.muted}
+              value={manualDesc} onChangeText={setManualDesc} />
+            <View style={s.catRow}>
+              {['Paketi', 'Oprema', 'Ostalo'].map(c => (
+                <TouchableOpacity key={c} style={[s.catBtn, manualCat === c && s.catBtnActive]} onPress={() => setManualCat(c)}>
+                  <Text style={[s.catBtnText, manualCat === c && s.catBtnTextActive]}>{c}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalBtnCancel} onPress={() => setShowManual(false)}>
+                <Text style={s.modalBtnCancelText}>Odustani</Text></TouchableOpacity>
+              <TouchableOpacity style={s.modalBtnConfirm} onPress={addManual}>
+                <Text style={s.modalBtnConfirmText}>Sačuvaj</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -868,11 +1161,49 @@ const s = StyleSheet.create({
   pkgOptionText: { fontFamily: Fonts.bodyMedium, fontSize: Sizes.small, color: Colors.foreground },
   pkgOptionTextActive: { color: Colors.primary, fontFamily: Fonts.bodySemiBold },
   // Warning row
-  warningRow: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  warningRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   // Package requests
   requestRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   requestInfo: { flex: 1 },
   requestActions: { flexDirection: 'row', gap: 8 },
   approveBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#059669', justifyContent: 'center', alignItems: 'center' },
   rejectBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.danger, justifyContent: 'center', alignItems: 'center' },
+  // Sub-section tabs
+  subTabs: { flexDirection: 'row', gap: 6, marginBottom: 16, flexWrap: 'wrap' },
+  subTab: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: Colors.secondary },
+  subTabActive: { backgroundColor: Colors.primary },
+  subTabText: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: Colors.primary },
+  subTabTextActive: { color: Colors.white },
+  warningDot: { backgroundColor: Colors.danger, borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
+  warningDotText: { fontFamily: Fonts.bodyBold, fontSize: 9, color: '#FFF' },
+  // Monthly cards
+  monthHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  monthName: { fontFamily: Fonts.heading, fontSize: 16, color: Colors.foreground },
+  monthTotal: { fontFamily: Fonts.bodyBold, fontSize: 22, color: Colors.primary, marginTop: 2 },
+  monthDetail: { marginTop: 16, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 12 },
+  changeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  changeText: { fontFamily: Fonts.bodySemiBold, fontSize: 12 },
+  detailLabel: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginTop: 4 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  // Bar chart
+  barRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
+  barLabel: { fontFamily: Fonts.bodySemiBold, fontSize: 12, color: Colors.foreground, width: 55 },
+  barBg: { flex: 1, height: 20, backgroundColor: Colors.secondary, borderRadius: 10, overflow: 'hidden' },
+  barFill: { height: '100%', backgroundColor: Colors.primary, borderRadius: 10, minWidth: 4 },
+  barValue: { fontFamily: Fonts.bodyBold, fontSize: 12, color: Colors.foreground, width: 40, textAlign: 'right' },
+  // Mini stats
+  miniStat: { flex: 1, ...CardStyle, padding: 14, alignItems: 'center' },
+  miniStatValue: { fontFamily: Fonts.heading, fontSize: 24, color: Colors.primary },
+  miniStatLabel: { fontFamily: Fonts.body, fontSize: 10, color: Colors.muted, textAlign: 'center', marginTop: 4 },
+  // Compare
+  compareRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingVertical: 12 },
+  compareBox: { alignItems: 'center' },
+  compareValue: { fontFamily: Fonts.heading, fontSize: 28, color: Colors.primary },
+  compareLabel: { fontFamily: Fonts.body, fontSize: 12, color: Colors.muted, marginTop: 4 },
+  // Category selector
+  catRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  catBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.inputBorder, alignItems: 'center' },
+  catBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  catBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: 13, color: Colors.foreground },
+  catBtnTextActive: { color: Colors.white },
 });

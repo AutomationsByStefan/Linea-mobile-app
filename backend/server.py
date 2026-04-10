@@ -104,7 +104,7 @@ async def admin_stats(request: Request):
     }
 
 
-# === ADMIN WARNINGS ===
+# === ADMIN WARNINGS (expanded) ===
 @app.get("/api/admin/warnings")
 async def admin_warnings(request: Request):
     cookies = dict(request.cookies)
@@ -114,36 +114,199 @@ async def admin_warnings(request: Request):
 
     users = await get_railway_data("/api/admin/users", cookies)
     users_list = users if isinstance(users, list) else []
+    now = datetime.now(timezone.utc)
 
     warnings = []
     for u in users_list:
         remaining = u.get('preostali_termini', 0)
         expiry = u.get('datum_isteka', '')
         has_membership = u.get('aktivna_clanarina', False)
+        last_activity = u.get('last_activity', '')
 
+        # 0 remaining sessions
         if has_membership and remaining == 0:
             warnings.append({
-                "user_id": u.get('user_id'),
-                "name": u.get('name'),
-                "phone": u.get('phone'),
-                "type": "no_sessions",
-                "message": f"Preostalo 0 termina",
+                "user_id": u.get('user_id'), "name": u.get('name'),
+                "phone": u.get('phone'), "type": "no_sessions",
+                "message": "Preostalo 0 termina", "severity": "high",
             })
-        elif has_membership and expiry:
+
+        # Membership expiring within 7 days
+        if has_membership and expiry:
             try:
                 exp_date = datetime.fromisoformat(expiry.replace('Z', '+00:00'))
-                days_left = (exp_date - datetime.now(timezone.utc)).days
-                if days_left <= 3:
+                days_left = (exp_date - now).days
+                if 0 < days_left <= 7:
                     warnings.append({
-                        "user_id": u.get('user_id'),
-                        "name": u.get('name'),
-                        "phone": u.get('phone'),
-                        "type": "expiring",
-                        "message": f"Članarina ističe {expiry[:10]}",
+                        "user_id": u.get('user_id'), "name": u.get('name'),
+                        "phone": u.get('phone'), "type": "expiring",
+                        "message": f"Članarina ističe za {days_left} dana ({expiry[:10]})", "severity": "medium",
                     })
             except:
                 pass
+
+        # Inactive for 30+ days
+        if last_activity:
+            try:
+                last = datetime.fromisoformat(last_activity.replace('Z', '+00:00'))
+                days_inactive = (now - last).days
+                if days_inactive >= 30:
+                    warnings.append({
+                        "user_id": u.get('user_id'), "name": u.get('name'),
+                        "phone": u.get('phone'), "type": "inactive",
+                        "message": f"Neaktivan {days_inactive} dana", "severity": "low",
+                    })
+            except:
+                pass
+
     return warnings
+
+
+# === SLOT ANALYTICS ===
+@app.get("/api/admin/analytics/slots")
+async def slot_analytics(request: Request):
+    cookies = dict(request.cookies)
+    admin = await check_admin(cookies)
+    if not admin:
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, status_code=403)
+
+    schedule = await get_railway_data("/api/admin/schedule", cookies)
+    bookings = await get_railway_data("/api/admin/bookings", cookies)
+    slots = schedule if isinstance(schedule, list) else []
+    bookings_list = bookings if isinstance(bookings, list) else []
+
+    # Day of week popularity
+    day_names = ['Ponedjeljak', 'Utorak', 'Srijeda', 'Četvrtak', 'Petak', 'Subota', 'Nedjelja']
+    day_counts = {i: 0 for i in range(7)}
+    day_totals = {i: 0 for i in range(7)}
+    for b in bookings_list:
+        try:
+            d = datetime.fromisoformat(b.get('datum', ''))
+            day_counts[d.weekday()] += 1
+        except:
+            pass
+    for s in slots:
+        try:
+            d = datetime.fromisoformat(s.get('datum', ''))
+            day_totals[d.weekday()] += 1
+        except:
+            pass
+
+    total_bookings = sum(day_counts.values()) or 1
+    day_popularity = [
+        {"day": day_names[i], "bookings": day_counts[i],
+         "percentage": round(day_counts[i] / total_bookings * 100, 1)}
+        for i in range(6)  # Skip Sunday
+    ]
+    day_popularity.sort(key=lambda x: x['bookings'], reverse=True)
+
+    # Time slot popularity
+    time_occupancy = {}
+    for s in slots:
+        t = s.get('vrijeme', '')
+        total = s.get('ukupno_mjesta', 3)
+        free = s.get('slobodna_mjesta', 3)
+        if t not in time_occupancy:
+            time_occupancy[t] = {"total_slots": 0, "total_occupied": 0}
+        time_occupancy[t]["total_slots"] += total
+        time_occupancy[t]["total_occupied"] += (total - free)
+
+    time_ranking = []
+    for t, data in time_occupancy.items():
+        occ = round(data['total_occupied'] / (data['total_slots'] or 1) * 100, 1)
+        time_ranking.append({"time": t, "occupancy": occ, "occupied": data['total_occupied'], "total": data['total_slots']})
+    time_ranking.sort(key=lambda x: x['occupancy'], reverse=True)
+
+    # Average occupancy
+    total_capacity = sum(s.get('ukupno_mjesta', 3) for s in slots) or 1
+    total_occupied = sum(s.get('ukupno_mjesta', 3) - s.get('slobodna_mjesta', 3) for s in slots)
+    avg_occupancy = round(total_occupied / total_capacity * 100, 1)
+
+    # Cancellations
+    cancellations = await db.cancelled_trainings.find({}, {"_id": 0}).to_list(500)
+    cancel_requests = await db.cancel_requests.find({}, {"_id": 0}).to_list(500)
+
+    return {
+        "day_popularity": day_popularity,
+        "time_ranking": time_ranking,
+        "avg_occupancy": avg_occupancy,
+        "total_bookings": sum(day_counts.values()),
+        "total_slots": len(slots),
+        "cancellations": len(cancellations) + len(cancel_requests),
+    }
+
+
+# === CLIENT ANALYTICS ===
+@app.get("/api/admin/analytics/clients")
+async def client_analytics(request: Request):
+    cookies = dict(request.cookies)
+    admin = await check_admin(cookies)
+    if not admin:
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, status_code=403)
+
+    users = await get_railway_data("/api/admin/users", cookies)
+    requests_data = await get_railway_data("/api/admin/package-requests", cookies)
+    users_list = users if isinstance(users, list) else []
+    all_requests = requests_data if isinstance(requests_data, list) else []
+    now = datetime.now(timezone.utc)
+
+    active = sum(1 for u in users_list if u.get('aktivna_clanarina'))
+    inactive = len(users_list) - active
+
+    # Inactive 30+ days
+    inactive_30 = []
+    for u in users_list:
+        la = u.get('last_activity', '')
+        if la:
+            try:
+                last = datetime.fromisoformat(la.replace('Z', '+00:00'))
+                if (now - last).days >= 30:
+                    inactive_30.append({"name": u.get('name'), "phone": u.get('phone'),
+                                        "days": (now - last).days})
+            except:
+                pass
+
+    # New clients this month vs last
+    this_month = now.strftime('%Y-%m')
+    last_month = (now.replace(day=1) - timedelta(days=1)).strftime('%Y-%m')
+    new_this = sum(1 for u in users_list if (u.get('created_at', '') or '')[:7] == this_month)
+    new_last = sum(1 for u in users_list if (u.get('created_at', '') or '')[:7] == last_month)
+
+    # Package retention (users who renewed = have >1 approved request)
+    user_requests = {}
+    for r in all_requests:
+        if r.get('status') == 'approved':
+            uid = r.get('user_id', '')
+            pkg = r.get('package_name', '')
+            if uid not in user_requests:
+                user_requests[uid] = {}
+            user_requests[uid][pkg] = user_requests[uid].get(pkg, 0) + 1
+
+    pkg_retention = {}
+    for uid, pkgs in user_requests.items():
+        for pkg, count in pkgs.items():
+            if pkg not in pkg_retention:
+                pkg_retention[pkg] = {"total": 0, "renewed": 0}
+            pkg_retention[pkg]["total"] += 1
+            if count > 1:
+                pkg_retention[pkg]["renewed"] += 1
+
+    retention = [
+        {"package": pkg, "total": d["total"], "renewed": d["renewed"],
+         "rate": round(d["renewed"] / (d["total"] or 1) * 100)}
+        for pkg, d in pkg_retention.items()
+    ]
+    retention.sort(key=lambda x: x['rate'], reverse=True)
+
+    return {
+        "active_clients": active,
+        "inactive_clients": inactive,
+        "total_clients": len(users_list) + 1,
+        "inactive_30_days": inactive_30,
+        "new_this_month": new_this,
+        "new_last_month": new_last,
+        "package_retention": retention,
+    }
 
 
 # === ADMIN FINANCE ===
