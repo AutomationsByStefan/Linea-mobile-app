@@ -1,10 +1,8 @@
 import { Platform } from 'react-native';
 
-// Web uses proxy (same-origin, no CORS issues with cookies)
-// Native uses direct production URL (no CORS on native)
-const API_BASE = Platform.OS === 'web'
-  ? (process.env.EXPO_PUBLIC_BACKEND_URL || '')
-  : (process.env.EXPO_PUBLIC_API_URL || process.env.EXPO_PUBLIC_BACKEND_URL || '');
+// Always use proxy backend for all API calls
+// Proxy handles cookie forwarding and has additional endpoints (admin stats, warnings, finance, etc.)
+const API_BASE = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 type FetchOptions = RequestInit & { timeout?: number };
 
