@@ -5,8 +5,24 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Sizes, CardStyle, BosnianDaysShort, BosnianDays, BosnianMonths, formatDateBosnian } from '../../src/theme';
+import Svg, { Path, Rect } from 'react-native-svg';
+import { Colors, Fonts, Sizes, CardStyle, BosnianDaysShort, formatDateBosnian } from '../../src/theme';
 import { scheduleAPI, trainingAPI } from '../../src/api';
+
+// Reformer bed SVG icon
+function BedIcon({ filled = false, size = 20 }: { filled?: boolean; size?: number }) {
+  const color = filled ? Colors.primary : Colors.border;
+  return (
+    <Svg width={size} height={size * 0.5} viewBox="0 0 40 20">
+      <Rect x="2" y="10" width="36" height="4" rx="2" fill={color} />
+      <Rect x="6" y="4" width="6" height="6" rx="1.5" fill={color} />
+      <Rect x="15" y="4" width="6" height="6" rx="1.5" fill={color} />
+      <Rect x="24" y="4" width="6" height="6" rx="1.5" fill={color} />
+      <Rect x="4" y="14" width="3" height="4" rx="1" fill={color} />
+      <Rect x="33" y="14" width="3" height="4" rx="1" fill={color} />
+    </Svg>
+  );
+}
 
 function getWorkingDays(count: number): Date[] {
   const days: Date[] = [];
@@ -72,16 +88,7 @@ export default function TerminiScreen() {
     if (!isToday) return true;
     const hour = parseInt((s.vrijeme || s.time || '0').split(':')[0], 10);
     return hour > currentHour;
-  });
-
-  const morningSlots = daySlots.filter((s: any) => {
-    const h = parseInt((s.vrijeme || s.time || '0').split(':')[0], 10);
-    return h < 12;
-  });
-  const afternoonSlots = daySlots.filter((s: any) => {
-    const h = parseInt((s.vrijeme || s.time || '0').split(':')[0], 10);
-    return h >= 12;
-  });
+  }).sort((a: any, b: any) => (a.vrijeme || a.time || '').localeCompare(b.vrijeme || b.time || ''));
 
   const myBookingToday = myTrainings.find((t: any) => (t.datum || t.date) === dateStr);
 
@@ -99,7 +106,6 @@ export default function TerminiScreen() {
       if (res.is_trial) {
         setTrialToast('Čestitamo! Izabrali ste svoj besplatni probni trening!');
         setTimeout(() => setTrialToast(''), 5000);
-        // Show share modal after trial toast appears (delayed)
         const free = (slot.slobodna_mjesta || slot.available_spots || 0) - 1;
         if (free > 0) {
           setTimeout(() => setShareInfo({ training_id: res.training_id, slot }), 1500);
@@ -130,167 +136,136 @@ export default function TerminiScreen() {
     setShareInfo(null);
   };
 
+  // Slot card with bed icons
   const SlotCard = ({ slot }: { slot: any }) => {
     const vrijeme = slot.vrijeme || slot.time;
     const total = slot.ukupno_mjesta || slot.total_spots || 3;
     const free = slot.slobodna_mjesta || slot.available_spots || 0;
+    const occupied = total - free;
     const isFull = free <= 0;
 
     return (
-      <View style={styles.slotCard} testID={`slot-${vrijeme}`}>
-        <Text style={styles.slotTime}>{vrijeme}</Text>
-        <Text style={[styles.slotSpots, isFull && styles.slotSpotsFull]}>
-          {free}/{total}
-        </Text>
-        {isFull ? (
-          <View style={styles.slotBtnFull}>
-            <Text style={styles.slotBtnFullText}>Puno</Text>
-          </View>
-        ) : (
-          <TouchableOpacity
-            testID={`book-slot-${vrijeme}`}
-            style={styles.slotBtn}
-            onPress={() => setConfirmSlot(slot)}
-          >
-            <Text style={styles.slotBtnText}>Rezerviši</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      <TouchableOpacity
+        testID={`slot-${vrijeme}`}
+        style={[st.slotCard, isFull && st.slotCardFull]}
+        onPress={() => !isFull && setConfirmSlot(slot)}
+        disabled={isFull}
+        activeOpacity={0.7}
+      >
+        <Text style={[st.slotTime, isFull && st.slotTimeFull]}>{vrijeme}</Text>
+        <View style={st.bedRow}>
+          {Array.from({ length: total }).map((_, i) => (
+            <BedIcon key={i} filled={i >= occupied} size={22} />
+          ))}
+        </View>
+        {isFull && <Text style={st.slotFullLabel}>Puno</Text>}
+      </TouchableOpacity>
     );
   };
 
   if (loading) {
     return (
-      <View style={[styles.centered, { paddingTop: insets.top }]}>
+      <View style={[st.centered, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.flex}>
+    <View style={st.flex}>
       <ScrollView
-        style={styles.flex}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 8, paddingBottom: 24 }]}
+        style={st.flex}
+        contentContainerStyle={[st.content, { paddingTop: insets.top + 8, paddingBottom: 24 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
-        <Text style={styles.pageTitle}>Termini</Text>
-        <Text style={styles.pageSubtitle}>Odaberite datum za prikaz termina</Text>
+        <Text style={st.pageTitle}>Rezerviši termin</Text>
+        <Text style={st.pageSubtitle}>Pronađi idealan termin za sebe</Text>
 
-        {/* Date Strip */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.dateStrip}
-          testID="date-strip"
-        >
-          {workingDays.map((day) => {
-            const isSelected = toDateStr(day) === dateStr;
-            const isTodayDate = toDateStr(day) === toDateStr(new Date());
-            return (
-              <TouchableOpacity
-                key={toDateStr(day)}
-                testID={`date-${toDateStr(day)}`}
-                style={[
-                  styles.dateBtn,
-                  isTodayDate && !isSelected && styles.dateBtnToday,
-                  isSelected && styles.dateBtnSelected,
-                ]}
-                onPress={() => setSelectedDate(day)}
-              >
-                <Text style={[
-                  styles.dateDayLabel,
-                  isSelected && styles.dateDayLabelSelected,
-                ]}>
-                  {BosnianDaysShort[day.getDay()]}
-                </Text>
-                <Text style={[
-                  styles.dateNum,
-                  isSelected && styles.dateNumSelected,
-                ]}>
-                  {day.getDate()}.
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {/* ===== DATE STRIP — Redesigned ===== */}
+        <Text style={st.dateHeader}>Izaberi datum</Text>
+        <View style={st.dateStripBg}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={st.dateStrip}
+            testID="date-strip"
+          >
+            {workingDays.map((day) => {
+              const isSelected = toDateStr(day) === dateStr;
+              return (
+                <TouchableOpacity
+                  key={toDateStr(day)}
+                  testID={`date-${toDateStr(day)}`}
+                  style={st.dateItem}
+                  onPress={() => setSelectedDate(day)}
+                >
+                  <Text style={[st.dateDayLabel, isSelected && st.dateDayLabelSelected]}>
+                    {BosnianDaysShort[day.getDay()]}
+                  </Text>
+                  <View style={[st.dateCircle, isSelected && st.dateCircleSelected]}>
+                    <Text style={[st.dateNum, isSelected && st.dateNumSelected]}>
+                      {day.getDate()}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
 
         {/* My booking today */}
         {myBookingToday && (
-          <View style={styles.myBookingCard} testID="my-booking-today">
+          <View style={st.myBookingCard} testID="my-booking-today">
             <Feather name="check-circle" size={18} color={Colors.primary} />
-            <Text style={styles.myBookingText}>
+            <Text style={st.myBookingText}>
               Vaš termin za ovaj dan: {myBookingToday.vrijeme || myBookingToday.time}
             </Text>
           </View>
         )}
 
-        {/* Morning Slots */}
-        {morningSlots.length > 0 && (
-          <View style={styles.slotSection}>
-            <Text style={styles.slotLabel}>PRIJEPODNE</Text>
-            <View style={styles.slotGrid}>
-              {morningSlots.map((slot: any, i: number) => (
-                <SlotCard key={`m-${i}`} slot={slot} />
-              ))}
-            </View>
-          </View>
-        )}
+        {/* ===== TIME SLOTS — 3-column grid with bed icons ===== */}
+        <Text style={st.slotsTitle}>Dostupni termini</Text>
 
-        {/* Afternoon Slots */}
-        {afternoonSlots.length > 0 && (
-          <View style={styles.slotSection}>
-            <Text style={styles.slotLabel}>POSLIJEPODNE</Text>
-            <View style={styles.slotGrid}>
-              {afternoonSlots.map((slot: any, i: number) => (
-                <SlotCard key={`a-${i}`} slot={slot} />
-              ))}
-            </View>
+        {daySlots.length > 0 ? (
+          <View style={st.slotGrid}>
+            {daySlots.map((slot: any, i: number) => (
+              <SlotCard key={`s-${i}`} slot={slot} />
+            ))}
           </View>
-        )}
-
-        {daySlots.length === 0 && (
-          <View style={styles.emptyWrap}>
+        ) : (
+          <View style={st.emptyWrap}>
             <Feather name="calendar" size={40} color={Colors.muted} />
-            <Text style={styles.emptyText}>Nema dostupnih termina za ovaj datum</Text>
+            <Text style={st.emptyText}>Nema dostupnih termina za ovaj datum</Text>
           </View>
         )}
       </ScrollView>
 
       {/* Trial Toast */}
       {trialToast ? (
-        <View style={styles.toast}>
+        <View style={st.toast}>
           <Feather name="award" size={20} color={Colors.white} />
-          <Text style={styles.toastText}>{trialToast}</Text>
+          <Text style={st.toastText}>{trialToast}</Text>
         </View>
       ) : null}
 
       {/* Confirm Modal */}
       <Modal visible={!!confirmSlot} transparent animationType="fade">
-        <View style={styles.overlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Potvrda termina</Text>
-            <Text style={styles.modalDate}>
+        <View style={st.overlay}>
+          <View style={st.modalCard}>
+            <Text style={st.modalTitle}>Potvrda termina</Text>
+            <Text style={st.modalDate}>
               {confirmSlot && formatDateBosnian(confirmSlot.datum || confirmSlot.date || dateStr)}
             </Text>
-            <Text style={styles.modalTime}>{confirmSlot?.vrijeme || confirmSlot?.time}</Text>
-            <Text style={styles.modalQuestion}>Da li potvrđujete dolazak?</Text>
-            <View style={styles.modalBtns}>
-              <TouchableOpacity
-                testID="confirm-cancel-btn"
-                style={styles.modalBtnNo}
-                onPress={() => setConfirmSlot(null)}
-              >
-                <Text style={styles.modalBtnNoText}>Ne</Text>
+            <Text style={st.modalTime}>{confirmSlot?.vrijeme || confirmSlot?.time}</Text>
+            <Text style={st.modalQuestion}>Da li potvrđujete dolazak?</Text>
+            <View style={st.modalBtns}>
+              <TouchableOpacity testID="confirm-cancel-btn" style={st.modalBtnNo} onPress={() => setConfirmSlot(null)}>
+                <Text style={st.modalBtnNoText}>Ne</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                testID="confirm-yes-btn"
-                style={[styles.modalBtnYes, booking && { opacity: 0.6 }]}
-                onPress={() => confirmSlot && handleBook(confirmSlot)}
-                disabled={booking}
-              >
+              <TouchableOpacity testID="confirm-yes-btn" style={[st.modalBtnYes, booking && { opacity: 0.6 }]}
+                onPress={() => confirmSlot && handleBook(confirmSlot)} disabled={booking}>
                 {booking ? <ActivityIndicator color={Colors.white} size="small" /> : (
-                  <Text style={styles.modalBtnYesText}>Da</Text>
+                  <Text style={st.modalBtnYesText}>Da</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -300,16 +275,16 @@ export default function TerminiScreen() {
 
       {/* Share Modal */}
       <Modal visible={!!shareInfo} transparent animationType="fade">
-        <View style={styles.overlay}>
-          <View style={styles.modalCard}>
+        <View style={st.overlay}>
+          <View style={st.modalCard}>
             <Feather name="check-circle" size={40} color={Colors.primary} style={{ alignSelf: 'center', marginBottom: 12 }} />
-            <Text style={styles.modalTitle}>Termin rezervisan!</Text>
-            <TouchableOpacity testID="share-btn" style={styles.shareBtn} onPress={handleShare}>
+            <Text style={st.modalTitle}>Termin rezervisan!</Text>
+            <TouchableOpacity testID="share-btn" style={st.shareBtn} onPress={handleShare}>
               <Feather name="share-2" size={18} color={Colors.white} />
-              <Text style={styles.shareBtnText}>Podijeli termin s prijateljicom</Text>
+              <Text style={st.shareBtnText}>Podijeli termin s prijateljicom</Text>
             </TouchableOpacity>
             <TouchableOpacity testID="share-skip-btn" onPress={() => setShareInfo(null)}>
-              <Text style={styles.skipText}>Preskoči</Text>
+              <Text style={st.skipText}>Preskoči</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -318,30 +293,56 @@ export default function TerminiScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const st = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
   content: { paddingHorizontal: 16 },
-  pageTitle: { fontFamily: Fonts.heading, fontSize: Sizes.h2, color: Colors.foreground, marginBottom: 4 },
-  pageSubtitle: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted, marginBottom: 20 },
-  dateStrip: { paddingVertical: 8, gap: 8, marginBottom: 20 },
-  dateBtn: {
-    width: 56,
-    height: 68,
-    borderRadius: 16,
-    backgroundColor: Colors.cardBg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+
+  // Header
+  pageTitle: { fontFamily: Fonts.heading, fontSize: 26, color: Colors.foreground, marginBottom: 4 },
+  pageSubtitle: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted, marginBottom: 24 },
+
+  // Date strip
+  dateHeader: { fontFamily: Fonts.heading, fontSize: 18, color: Colors.foreground, marginBottom: 12 },
+  dateStripBg: {
+    backgroundColor: Colors.secondary,
+    borderRadius: 20,
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  dateStrip: { paddingHorizontal: 8, gap: 0 },
+  dateItem: {
+    width: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  dateDayLabel: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 12,
+    color: Colors.muted,
+  },
+  dateDayLabelSelected: { color: Colors.foreground, fontFamily: Fonts.bodyBold },
+  dateCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 4,
   },
-  dateBtnToday: { backgroundColor: 'rgba(166,139,91,0.1)', borderColor: 'rgba(166,139,91,0.3)' },
-  dateBtnSelected: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  dateDayLabel: { fontFamily: Fonts.bodySemiBold, fontSize: 10, color: Colors.muted, textTransform: 'uppercase' },
-  dateDayLabelSelected: { color: Colors.white },
-  dateNum: { fontFamily: Fonts.bodyBold, fontSize: 18, color: Colors.foreground },
-  dateNumSelected: { color: Colors.white },
+  dateCircleSelected: {
+    backgroundColor: Colors.foreground,
+  },
+  dateNum: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 20,
+    color: Colors.foreground,
+  },
+  dateNumSelected: {
+    color: Colors.background,
+  },
+
+  // My booking
   myBookingCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -352,107 +353,72 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   myBookingText: { fontFamily: Fonts.bodyMedium, fontSize: Sizes.small, color: Colors.foreground, flex: 1 },
-  slotSection: { marginBottom: 20 },
-  slotLabel: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: Sizes.xs,
-    color: Colors.muted,
-    textAlign: 'center',
-    marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+
+  // Slots
+  slotsTitle: { fontFamily: Fonts.heading, fontSize: 18, color: Colors.foreground, marginBottom: 14 },
+  slotGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
-  slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   slotCard: {
-    width: '23%',
-    backgroundColor: Colors.cardBg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 16,
-    padding: 8,
-    alignItems: 'center',
-    gap: 4,
-  },
-  slotTime: { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.foreground },
-  slotSpots: { fontFamily: Fonts.body, fontSize: 10, color: Colors.primary },
-  slotSpotsFull: { color: Colors.muted },
-  slotBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  slotBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: 10, color: Colors.white },
-  slotBtnFull: {
+    width: '31%',
     backgroundColor: Colors.secondary,
-    borderRadius: 8,
-    paddingVertical: 4,
+    borderRadius: 16,
+    paddingVertical: 14,
     paddingHorizontal: 8,
+    alignItems: 'center',
+    gap: 8,
   },
-  slotBtnFullText: { fontFamily: Fonts.body, fontSize: 10, color: Colors.muted },
+  slotCardFull: {
+    opacity: 0.5,
+  },
+  slotTime: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 18,
+    color: Colors.foreground,
+  },
+  slotTimeFull: { color: Colors.muted },
+  bedRow: {
+    flexDirection: 'row',
+    gap: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotFullLabel: {
+    fontFamily: Fonts.body,
+    fontSize: 10,
+    color: Colors.muted,
+    marginTop: -2,
+  },
+
+  // Empty
   emptyWrap: { alignItems: 'center', paddingVertical: 40, gap: 12 },
   emptyText: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted, textAlign: 'center' },
+
+  // Toast
   toast: {
-    position: 'absolute',
-    top: 60,
-    left: 16,
-    right: 16,
-    backgroundColor: Colors.primary,
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    zIndex: 9999,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    position: 'absolute', top: 60, left: 16, right: 16,
+    backgroundColor: Colors.primary, borderRadius: 16, padding: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    zIndex: 9999, elevation: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
   },
   toastText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.white, flex: 1 },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
+
+  // Modals — unchanged
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   modalCard: { backgroundColor: Colors.cardBg, borderRadius: 24, padding: 24, width: '100%', maxWidth: 360 },
   modalTitle: { fontFamily: Fonts.heading, fontSize: Sizes.h3, color: Colors.foreground, textAlign: 'center', marginBottom: 16 },
   modalDate: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.foreground, textAlign: 'center' },
   modalTime: { fontFamily: Fonts.bodyBold, fontSize: Sizes.h2, color: Colors.primary, textAlign: 'center', marginBottom: 16 },
   modalQuestion: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted, textAlign: 'center', marginBottom: 20 },
   modalBtns: { flexDirection: 'row', gap: 12 },
-  modalBtnNo: {
-    flex: 1,
-    height: 48,
-    borderRadius: 9999,
-    borderWidth: 2,
-    borderColor: Colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  modalBtnNo: { flex: 1, height: 48, borderRadius: 9999, borderWidth: 2, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
   modalBtnNoText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.foreground },
-  modalBtnYes: {
-    flex: 1,
-    height: 48,
-    borderRadius: 9999,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  modalBtnYes: { flex: 1, height: 48, borderRadius: 9999, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
   modalBtnYesText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.white },
-  shareBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: Colors.primary,
-    borderRadius: 9999,
-    height: 48,
-    marginBottom: 12,
-  },
+  shareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, borderRadius: 9999, height: 48, marginBottom: 12 },
   shareBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.white },
   skipText: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted, textAlign: 'center', paddingVertical: 8 },
 });
