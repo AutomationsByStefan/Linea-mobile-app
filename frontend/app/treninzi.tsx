@@ -6,7 +6,6 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
 import { Colors, Fonts, Sizes, CardStyle, formatDateBosnian } from '../src/theme';
 import { trainingAPI, api } from '../src/api';
 
@@ -62,7 +61,6 @@ export default function TreninziScreen() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   const onRefresh = async () => {
     setRefreshing(true);

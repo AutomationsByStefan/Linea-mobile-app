@@ -6,7 +6,6 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
 import Svg, { Line, Circle, Text as SvgText, Polyline, Rect } from 'react-native-svg';
 import { Colors, Fonts, Sizes, CardStyle, formatDateShort } from '../src/theme';
 import { weightAPI } from '../src/api';
@@ -33,7 +32,6 @@ export default function TezinaScreen() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   const onRefresh = async () => {
     setRefreshing(true);

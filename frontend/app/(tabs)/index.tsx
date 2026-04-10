@@ -3,8 +3,7 @@ import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
   RefreshControl, ActivityIndicator, Linking,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useRouter, useNavigation } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts, Sizes, Spacing, CardStyle, formatDateBosnian } from '../../src/theme';
@@ -54,8 +53,12 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // Re-fetch data on screen focus (handles cross-screen refresh)
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+  // Re-fetch data on tab focus (cross-screen refresh)
+  const navigation = useNavigation();
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => { loadData(); });
+    return unsubscribe;
+  }, [navigation, loadData]);
 
   const onRefresh = async () => {
     setRefreshing(true);

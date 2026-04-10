@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from 'expo-router';
 import { Colors, Fonts, Sizes, CardStyle } from '../../src/theme';
 import { packagesAPI } from '../../src/api';
 
@@ -39,7 +39,11 @@ export default function PaketiScreen() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+  const navigation = useNavigation();
+  useEffect(() => {
+    const unsub = navigation.addListener('focus', () => { loadData(); });
+    return unsub;
+  }, [navigation, loadData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
