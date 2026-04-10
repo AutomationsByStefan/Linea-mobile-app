@@ -6,6 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors, Fonts, Sizes, CardStyle, formatDateShort } from '../../src/theme';
 import { profileAPI, authAPI, api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
@@ -32,6 +33,7 @@ export default function ProfilScreen() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   const onRefresh = async () => {
     setRefreshing(true);

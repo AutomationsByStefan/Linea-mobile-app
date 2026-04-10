@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { Colors, Fonts, Sizes, CardStyle, BosnianDaysShort, formatDateBosnian } from '../../src/theme';
 import { scheduleAPI, trainingAPI } from '../../src/api';
@@ -69,6 +70,8 @@ export default function TerminiScreen() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+  // Also re-fetch on screen focus for cross-screen refresh
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   const onRefresh = async () => {
     setRefreshing(true);

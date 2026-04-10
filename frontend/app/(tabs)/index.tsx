@@ -4,6 +4,7 @@ import {
   RefreshControl, ActivityIndicator, Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts, Sizes, Spacing, CardStyle, formatDateBosnian } from '../../src/theme';
@@ -53,7 +54,8 @@ export default function HomeScreen() {
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  // Re-fetch data on screen focus (handles cross-screen refresh)
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   const onRefresh = async () => {
     setRefreshing(true);
