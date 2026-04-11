@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Sizes, CardStyle, formatDateShort } from '../../src/theme';
+import { Colors, Fonts, Sizes, CardStyle, formatDD } from '../../src/theme';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
 
@@ -194,7 +194,7 @@ function DashboardSection() {
               <View style={s.requestInfo}>
                 <Text style={s.userName}>{r.user_name}</Text>
                 <Text style={s.userSub}>{r.package_name} — {r.package_price} KM</Text>
-                <Text style={s.userSub}>{r.package_sessions} termina • {(r.created_at || '').slice(0, 10)}</Text>
+                <Text style={s.userSub}>{r.package_sessions} termina • {formatDD(r.created_at)}</Text>
               </View>
               <View style={s.requestActions}>
                 <TouchableOpacity testID={`approve-req-${r.id}`} style={s.approveBtn} onPress={() => approveRequest(r.id)}>
@@ -269,7 +269,7 @@ function DashboardSection() {
               <Text style={s.userName}>{u.name}</Text>
               <Text style={s.userSub}>{u.email || u.phone}</Text>
             </View>
-            <Text style={s.userDate}>{(u.created_at || '').slice(0, 10)}</Text>
+            <Text style={s.userDate}>{formatDD(u.created_at)}</Text>
           </View>
         ))}
       </View>
@@ -777,7 +777,7 @@ function BookingsSection() {
                 <Text style={s.userName}>{b.user_name || b.name || 'Korisnik'}</Text>
                 <Text style={s.userSub}>{b.user_email || b.email || ''}</Text>
               </View>
-              <Text style={s.bookingDate}>{(b.datum || b.date || '').slice(0, 10)}</Text>
+              <Text style={s.bookingDate}>{formatDD(b.datum || b.date)}</Text>
               <Text style={s.bookingTime}>{b.vrijeme || b.time}</Text>
               <View style={[s.statusBadge, { backgroundColor: color + '20' }]}>
                 <Text style={[s.statusText, { color }]}>{label}</Text>
@@ -914,9 +914,9 @@ function UsersSection() {
               {isExpanded && (
                 <View style={s.expandedContent}>
                   <View style={s.expandedStats}>
-                    <View style={s.expandedStat}><Text style={s.expandedLabel}>Registracija</Text><Text style={s.expandedValue}>{(u.created_at || '').slice(0, 10)}</Text></View>
-                    <View style={s.expandedStat}><Text style={s.expandedLabel}>Aktivacija</Text><Text style={s.expandedValue}>{u.datum_aktivacije || '-'}</Text></View>
-                    <View style={s.expandedStat}><Text style={s.expandedLabel}>Ističe</Text><Text style={s.expandedValue}>{u.datum_isteka || '-'}</Text></View>
+                    <View style={s.expandedStat}><Text style={s.expandedLabel}>Registracija</Text><Text style={s.expandedValue}>{formatDD(u.created_at)}</Text></View>
+                    <View style={s.expandedStat}><Text style={s.expandedLabel}>Aktivacija</Text><Text style={s.expandedValue}>{formatDD(u.datum_aktivacije)}</Text></View>
+                    <View style={s.expandedStat}><Text style={s.expandedLabel}>Ističe</Text><Text style={s.expandedValue}>{formatDD(u.datum_isteka)}</Text></View>
                     <View style={s.expandedStat}><Text style={s.expandedLabel}>Zakazani</Text><Text style={s.expandedValue}>{u.predstojeći_treninzi || 0} termina</Text></View>
                   </View>
 
@@ -1001,7 +1001,7 @@ function UsersSection() {
                         </Text>
                       </View>
                     </View>
-                    <Text style={s.userSub}>{(r.created_at || '').slice(0, 10)}</Text>
+                    <Text style={s.userSub}>{formatDD(r.created_at)}</Text>
                   </View>
                 ))}
               </ScrollView>

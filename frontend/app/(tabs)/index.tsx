@@ -234,7 +234,7 @@ export default function HomeScreen() {
           <TouchableOpacity
             testID="contact-address"
             style={styles.card}
-            onPress={() => Linking.openURL('https://maps.google.com/?q=Kralja+Petra+I+Oslobodioca+55+89101+Trebinje')}
+            onPress={() => Linking.openURL('https://www.google.com/maps?q=42.712313,18.3414666')}
           >
             <View style={styles.contactRow}>
               <View style={styles.contactIcon}>

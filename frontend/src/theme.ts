@@ -63,7 +63,9 @@ export const BosnianDaysShort = ['NED', 'PON', 'UTO', 'SRI', 'ČET', 'PET', 'SUB
 export const BosnianMonths = ['januar', 'februar', 'mart', 'april', 'maj', 'juni', 'juli', 'august', 'septembar', 'oktobar', 'novembar', 'decembar'];
 
 export function formatDateBosnian(dateStr: string): string {
+  if (!dateStr) return '';
   const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
   const day = BosnianDays[d.getDay()];
   const num = d.getDate();
   const month = BosnianMonths[d.getMonth()];
@@ -71,6 +73,16 @@ export function formatDateBosnian(dateStr: string): string {
 }
 
 export function formatDateShort(dateStr: string): string {
+  if (!dateStr) return '';
   const d = new Date(dateStr);
-  return `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}.`;
+  if (isNaN(d.getTime())) return dateStr;
+  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}.`;
+}
+
+/** DD.MM.YYYY format used everywhere */
+export function formatDD(dateStr: string): string {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr.slice(0, 10);
+  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}.`;
 }

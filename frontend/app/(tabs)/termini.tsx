@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  RefreshControl, ActivityIndicator, Modal, Alert,
+  RefreshControl, ActivityIndicator, Modal, Alert, Share, Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -119,6 +119,7 @@ export default function TerminiScreen() {
         }
       } else {
         const free = (slot.slobodna_mjesta || slot.available_spots || 0) - 1;
+        // Only show share if there are still spots left after this booking
         if (free > 0) {
           setShareInfo({ training_id: res.training_id, slot });
         }
@@ -136,7 +137,11 @@ export default function TerminiScreen() {
     if (!shareInfo) return;
     try {
       const res = await scheduleAPI.share(shareInfo.training_id);
-      Alert.alert('Link za dijeljenje', res.share_link || 'Link generisan');
+      const shareLink = res.share_link || res.link || 'https://lineapilates.com';
+      await Share.share({
+        message: `Pridruži mi se na Pilates Reformer treningu! 💪\n\n${shareLink}`,
+        title: 'Poziv na trening - Linea Pilates',
+      });
     } catch (e: any) {
       console.error(e);
     }

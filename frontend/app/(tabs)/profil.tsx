@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  RefreshControl, ActivityIndicator, Alert,
+  RefreshControl, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from 'expo-router';
-import { Colors, Fonts, Sizes, CardStyle, formatDateShort } from '../../src/theme';
+import * as ImagePicker from 'expo-image-picker';
+import { Colors, Fonts, Sizes, CardStyle, formatDD } from '../../src/theme';
 import { profileAPI, authAPI, api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
 
@@ -20,6 +21,24 @@ export default function ProfilScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+
+  const pickAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Dozvola', 'Potrebna je dozvola za pristup galeriji');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setAvatarUri(result.assets[0].uri);
+    }
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -111,9 +130,16 @@ export default function ProfilScreen() {
       >
         {/* Avatar & Name */}
         <View style={styles.profileHeader} testID="profile-header">
-          <View style={styles.avatar}>
-            <Feather name="user" size={36} color={Colors.primary} />
-          </View>
+          <TouchableOpacity style={styles.avatar} onPress={pickAvatar} testID="avatar-picker">
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+            ) : (
+              <Feather name="user" size={36} color={Colors.primary} />
+            )}
+            <View style={styles.avatarBadge}>
+              <Feather name="camera" size={12} color={Colors.white} />
+            </View>
+          </TouchableOpacity>
           <Text style={styles.userName}>{user?.name || [user?.ime, user?.prezime].filter(Boolean).join(' ') || ''}</Text>
           <Text style={styles.userContact}>{user?.email || user?.phone}</Text>
         </View>
@@ -143,37 +169,25 @@ export default function ProfilScreen() {
               </View>
             ) : null}
             <View style={styles.statusDetails}>
-              <View style={styles.statusDetail}>
-                <Feather name="clock" size={14} color={Colors.muted} />
-                <Text style={styles.detailText}>Termini važe 30 dana</Text>
-              </View>
-              {stats.datum_isteka && (
-                <View style={styles.statusDetail}>
-                  <Feather name="calendar" size={14} color={Colors.muted} />
-                  <Text style={styles.detailText}>Važe do: {formatDateShort(stats.datum_isteka)}</Text>
-                </View>
-              )}
               {stats.datum_pocetka && (
                 <View style={styles.statusDetail}>
                   <Feather name="calendar" size={14} color={Colors.muted} />
-                  <Text style={styles.detailText}>Početak: {formatDateShort(stats.datum_pocetka)}</Text>
+                  <Text style={styles.detailText}>Početak: {formatDD(stats.datum_pocetka)}</Text>
                 </View>
               )}
+              {stats.datum_isteka && (
+                <View style={styles.statusDetail}>
+                  <Feather name="calendar" size={14} color={Colors.muted} />
+                  <Text style={styles.detailText}>Važe do: {formatDD(stats.datum_isteka)}</Text>
+                </View>
+              )}
+              <View style={styles.statusDetail}>
+                <Feather name="clock" size={14} color={Colors.muted} />
+                <Text style={styles.detailText}>Termini važe 35 dana</Text>
+              </View>
             </View>
           </View>
         )}
-
-        {/* Stats Grid */}
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard} testID="stat-trainings">
-            <Text style={styles.statNumber}>{completed}</Text>
-            <Text style={styles.statLabel}>Treninga</Text>
-          </View>
-          <View style={styles.statCard} testID="stat-weeks">
-            <Text style={styles.statNumber}>{weeks}</Text>
-            <Text style={styles.statLabel}>Sedmica</Text>
-          </View>
-        </View>
 
         {/* Info Card */}
         <View style={styles.card} testID="profile-info-card">
@@ -193,7 +207,7 @@ export default function ProfilScreen() {
           {(stats?.member_since || stats?.clan_od || stats?.created_at || user?.created_at) && (
             <View style={styles.infoRow}>
               <Feather name="calendar" size={16} color={Colors.muted} />
-              <Text style={styles.infoText}>Član od {formatDateShort(stats?.member_since || stats?.clan_od || stats?.created_at || user?.created_at)}</Text>
+              <Text style={styles.infoText}>Član od {formatDD(stats?.member_since || stats?.clan_od || stats?.created_at || user?.created_at)}</Text>
             </View>
           )}
         </View>
@@ -282,6 +296,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
+    overflow: 'hidden',
+  },
+  avatarImage: { width: 96, height: 96, borderRadius: 48 },
+  avatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.background,
   },
   userName: { fontFamily: Fonts.heading, fontSize: Sizes.h2, color: Colors.foreground, marginBottom: 4 },
   userContact: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted },

@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Line, Circle, Text as SvgText, Polyline, Rect } from 'react-native-svg';
-import { Colors, Fonts, Sizes, CardStyle, formatDateShort } from '../src/theme';
+import { Colors, Fonts, Sizes, CardStyle, formatDD } from '../src/theme';
 import { weightAPI } from '../src/api';
 
 export default function TezinaScreen() {
@@ -209,7 +209,7 @@ export default function TezinaScreen() {
             return (
               <View key={id} style={styles.entryRow} testID={`weight-entry-${id}`}>
                 <View style={styles.entryInfo}>
-                  <Text style={styles.entryDate}>{date ? formatDateShort(date) : ''}</Text>
+                  <Text style={styles.entryDate}>{date ? formatDD(date) : ''}</Text>
                   <View style={styles.entryWeightRow}>
                     <Text style={styles.entryWeight}>{w}</Text>
                     <Text style={styles.entryKg}>kg</Text>

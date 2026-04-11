@@ -6,7 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Sizes, CardStyle, formatDateShort } from '../src/theme';
+import { Colors, Fonts, Sizes, CardStyle, formatDD } from '../src/theme';
 import { membershipsAPI } from '../src/api';
 
 export default function ClanarineScreen() {
@@ -63,7 +63,7 @@ export default function ClanarineScreen() {
         </Text>
         {expiry && (
           <Text style={styles.cardExpiry}>
-            {isPast ? 'Istekla' : 'Važi do'}: {formatDateShort(expiry)}
+            {isPast ? 'Istekla' : 'Važi do'}: {formatDD(expiry)}
           </Text>
         )}
         {!isPast && (

@@ -43,14 +43,15 @@ export default function LoginScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Google Auth request
+  // Google Auth request — using implicit flow (token response, no PKCE)
   const redirectUri = AuthSession.makeRedirectUri({ preferLocalhost: false });
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: GOOGLE_CLIENT_ID,
       scopes: ['profile', 'email'],
       redirectUri,
-      responseType: AuthSession.ResponseType.Token,
+      responseType: 'token' as any,
+      usePKCE: false,
     },
     discovery
   );
