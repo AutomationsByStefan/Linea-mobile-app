@@ -65,38 +65,41 @@ export default function AdminScreen() {
 function DashboardSection() {
   const [stats, setStats] = useState<any>(null);
   const [reminders, setReminders] = useState<any[]>([]);
-  const [finance, setFinance] = useState<any>(null);
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [todayBookings, setTodayBookings] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [newReminder, setNewReminder] = useState('');
-  const [showWarnings, setShowWarnings] = useState(false);
-  const [warnings, setWarnings] = useState<any[]>([]);
-  const [showManualIncome, setShowManualIncome] = useState(false);
-  const [manualAmount, setManualAmount] = useState('');
-  const [manualDesc, setManualDesc] = useState('');
-  const [manualCat, setManualCat] = useState('Ostalo');
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [st, rem, fin, usr, reqs] = await Promise.allSettled([
+      const [st, rem, usr, reqs, bk] = await Promise.allSettled([
         api.get('/api/admin/stats'),
         api.get('/api/admin/reminders'),
-        api.get('/api/admin/finance'),
         api.get('/api/admin/users'),
         api.get('/api/admin/package-requests'),
+        api.get('/api/admin/bookings'),
       ]);
       if (st.status === 'fulfilled') setStats(st.value);
       if (rem.status === 'fulfilled') setReminders(Array.isArray(rem.value) ? rem.value : []);
-      if (fin.status === 'fulfilled') setFinance(fin.value);
       if (usr.status === 'fulfilled') {
         const list = Array.isArray(usr.value) ? usr.value : [];
+        setAllUsers(list);
         setRecentUsers(list.sort((a: any, b: any) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 5));
       }
       if (reqs.status === 'fulfilled') {
         const all = Array.isArray(reqs.value) ? reqs.value : [];
         setPendingRequests(all.filter((r: any) => r.status === 'pending'));
+      }
+      if (bk.status === 'fulfilled') {
+        const all = Array.isArray(bk.value) ? bk.value : [];
+        const today = new Date().toISOString().slice(0, 10);
+        const todayBk = all.filter((b: any) => (b.datum || b.date) === today && (b.tip || b.status || '') !== 'otkazani')
+          .sort((a: any, b: any) => (a.vrijeme || a.time || '').localeCompare(b.vrijeme || b.time || ''));
+        setTodayBookings(todayBk);
       }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
@@ -118,25 +121,6 @@ function DashboardSection() {
     try { await api.delete(`/api/admin/reminders/${id}`); await load(); } catch (e) { console.error(e); }
   };
 
-  const loadWarnings = async () => {
-    try {
-      const w = await api.get('/api/admin/warnings');
-      setWarnings(Array.isArray(w) ? w : []);
-    } catch (e) { console.error(e); }
-    setShowWarnings(true);
-  };
-
-  const addManualIncome = async () => {
-    const amt = parseFloat(manualAmount);
-    if (isNaN(amt) || amt <= 0) { Alert.alert('Greška', 'Unesite validan iznos'); return; }
-    try {
-      await api.post('/api/admin/finance/manual', { amount: amt, description: manualDesc, category: manualCat });
-      setShowManualIncome(false);
-      setManualAmount(''); setManualDesc(''); setManualCat('Ostalo');
-      await load();
-    } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
-  };
-
   if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   const approveRequest = async (id: string) => {
@@ -151,22 +135,23 @@ function DashboardSection() {
     Alert.alert('Odbij zahtjev', 'Da li ste sigurni?', [
       { text: 'Ne', style: 'cancel' },
       { text: 'Da, odbij', style: 'destructive', onPress: async () => {
-        try {
-          await api.post(`/api/admin/package-requests/${id}/reject`);
-          await load();
-        } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+        try { await api.post(`/api/admin/package-requests/${id}/reject`); await load(); }
+        catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
       }},
     ]);
   };
 
-  const currentMonth = finance?.months?.[0];
+  const setParentSection = (section: Section) => {
+    // Access the parent AdminScreen's setSection through a ref pattern
+    // For now, we use a simpler approach - the cards that need navigation use the section switcher
+  };
 
   return (
     <ScrollView style={s.flex} contentContainerStyle={s.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}>
       <Text style={s.sectionTitle}>Kontrolna tabla</Text>
 
-      {/* Stats Cards */}
+      {/* Stats Cards — clickable */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.statsRow}>
         {[
           { label: 'Korisnici', value: stats?.total_users || 0, icon: 'users', color: '#7C3AED' },
@@ -211,12 +196,7 @@ function DashboardSection() {
 
       {/* Reminders */}
       <View style={s.card}>
-        <View style={s.cardHeader}>
-          <Text style={s.cardTitle}>Podsjetnici ({reminders.length})</Text>
-          <TouchableOpacity testID="show-warnings-btn" style={s.warningBtn} onPress={loadWarnings}>
-            <Feather name="alert-triangle" size={16} color={Colors.primary} />
-          </TouchableOpacity>
-        </View>
+        <Text style={s.cardTitle}>Podsjetnici ({reminders.length})</Text>
         <View style={s.reminderInput}>
           <TextInput style={s.reminderTextInput} placeholder="Novi podsjetnik..." placeholderTextColor={Colors.muted}
             value={newReminder} onChangeText={setNewReminder} />
@@ -234,88 +214,38 @@ function DashboardSection() {
         ))}
       </View>
 
-      {/* Finance */}
+      {/* Današnji treninzi */}
       <View style={s.card}>
-        <View style={s.cardHeader}>
-          <Text style={s.cardTitle}>Finansijski pregled</Text>
-          <TouchableOpacity testID="manual-income-btn" style={s.goldBtn} onPress={() => setShowManualIncome(true)}>
-            <Feather name="plus" size={14} color={Colors.white} />
-            <Text style={s.goldBtnText}>Ručni prihod</Text>
-          </TouchableOpacity>
-        </View>
-        {currentMonth && (
-          <>
-            <View style={s.financeRow}>
-              <View style={s.finBox}><Text style={s.finLabel}>Ukupno</Text><Text style={s.finValue}>{currentMonth.total} KM</Text></View>
-              <View style={s.finBox}><Text style={s.finLabel}>Paketi</Text><Text style={s.finValue}>{currentMonth.total - (currentMonth.manual?.reduce((a: number, m: any) => a + (m.amount || 0), 0) || 0)} KM</Text></View>
-              <View style={s.finBox}><Text style={s.finLabel}>Ručno</Text><Text style={s.finValue}>{currentMonth.manual?.reduce((a: number, m: any) => a + (m.amount || 0), 0) || 0} KM</Text></View>
-            </View>
-            {Object.entries(currentMonth.packages || {}).map(([name, data]: any) => (
-              <View key={name} style={s.finPkgRow}>
-                <Text style={s.finPkgName}>{name}</Text>
-                <Text style={s.finPkgPrice}>{data.total} KM ({data.count}x)</Text>
-              </View>
-            ))}
-          </>
-        )}
-      </View>
-
-      {/* Recent Users */}
-      <View style={s.card}>
-        <Text style={s.cardTitle}>Posljednji korisnici</Text>
-        {recentUsers.map((u: any) => (
-          <View key={u.user_id} style={s.userRow}>
-            <View>
-              <Text style={s.userName}>{u.name}</Text>
-              <Text style={s.userSub}>{u.email || u.phone}</Text>
-            </View>
-            <Text style={s.userDate}>{formatDD(u.created_at)}</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* Warnings Modal */}
-      <Modal visible={showWarnings} transparent animationType="slide">
-        <View style={s.modalOverlay}>
-          <View style={s.modalContent}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Upozorenja ({warnings.length})</Text>
-              <TouchableOpacity onPress={() => setShowWarnings(false)}><Feather name="x" size={22} color={Colors.foreground} /></TouchableOpacity>
-            </View>
-            <ScrollView style={{ maxHeight: 400 }}>
-              {warnings.length === 0 ? <Text style={s.emptyText}>Nema upozorenja</Text> :
-                warnings.map((w: any, i: number) => (
-                  <View key={i} style={s.warningRow}>
-                    <Text style={s.userName}>{w.name}</Text>
-                    <Text style={[s.userSub, { color: Colors.danger }]}>{w.message}</Text>
-                    <Text style={s.userSub}>{w.phone}</Text>
+        <Text style={s.cardTitle}>Današnji treninzi ({todayBookings.length})</Text>
+        {todayBookings.length === 0 ? (
+          <Text style={s.emptyText}>Nema zakazanih treninga za danas</Text>
+        ) : todayBookings.map((b: any) => {
+          const uid = b.user_id || '';
+          const usr = allUsers.find((u: any) => u.user_id === uid);
+          const isExp = expandedUserId === uid;
+          return (
+            <View key={b.id || b._id}>
+              <TouchableOpacity style={s.todayRow} onPress={() => setExpandedUserId(isExp ? null : uid)}>
+                <View style={s.todayTime}><Text style={s.todayTimeText}>{b.vrijeme || b.time}</Text></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.userName}>{b.user_name || b.name || 'Korisnik'}</Text>
+                  <Text style={s.userSub}>{b.user_email || ''}</Text>
+                </View>
+                <Feather name={isExp ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.muted} />
+              </TouchableOpacity>
+              {isExp && usr && (
+                <View style={s.expandedContent}>
+                  <View style={s.expandedStats}>
+                    <View style={s.expandedStat}><Text style={s.expandedLabel}>Registracija</Text><Text style={s.expandedValue}>{formatDD(usr.created_at)}</Text></View>
+                    <View style={s.expandedStat}><Text style={s.expandedLabel}>Paket</Text><Text style={s.expandedValue}>{usr.naziv_paketa || '-'}</Text></View>
+                    <View style={s.expandedStat}><Text style={s.expandedLabel}>Termini</Text><Text style={s.expandedValue}>{usr.preostali_termini || 0}/{usr.ukupni_termini || 0}</Text></View>
                   </View>
-                ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Manual Income Modal */}
-      <Modal visible={showManualIncome} transparent animationType="fade">
-        <View style={s.modalOverlay}>
-          <View style={s.modalContent}>
-            <Text style={s.modalTitle}>Ručni prihod</Text>
-            <TextInput style={s.modalInput} placeholder="Iznos (KM)" placeholderTextColor={Colors.muted}
-              value={manualAmount} onChangeText={setManualAmount} keyboardType="decimal-pad" />
-            <TextInput style={s.modalInput} placeholder="Opis (npr. Prodaja opreme)" placeholderTextColor={Colors.muted}
-              value={manualDesc} onChangeText={setManualDesc} />
-            <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalBtnCancel} onPress={() => setShowManualIncome(false)}>
-                <Text style={s.modalBtnCancelText}>Odustani</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.modalBtnConfirm} onPress={addManualIncome}>
-                <Text style={s.modalBtnConfirmText}>Sačuvaj</Text>
-              </TouchableOpacity>
+                </View>
+              )}
             </View>
-          </View>
-        </View>
-      </Modal>
+          );
+        })}
+      </View>
     </ScrollView>
   );
 }
@@ -742,13 +672,19 @@ function BookingsSection() {
   const filterLabels: Record<string, string> = { all: 'Svi', upcoming: 'Predstojeći', completed: 'Završeni', cancelled: 'Otkazani' };
   const statusColors: Record<string, string> = { upcoming: '#2563EB', completed: '#059669', cancelled: Colors.danger, predstojeći: '#2563EB', završeni: '#059669', otkazani: Colors.danger };
 
-  const filtered = bookings.filter(b => {
+  // Auto-classify bookings by time — past → Završeni, cancelled → Otkazani
+  const now = new Date();
+  const classifiedBookings = bookings.map((b: any) => {
+    const rawStatus = (b.status || b.tip || '').toLowerCase();
+    if (rawStatus.includes('otkazan') || rawStatus === 'cancelled') return { ...b, _status: 'cancelled' };
+    const dt = new Date(`${b.datum || b.date}T${b.vrijeme || b.time || '23:59'}`);
+    if (dt < now) return { ...b, _status: 'completed' };
+    return { ...b, _status: 'upcoming' };
+  });
+
+  const filtered = classifiedBookings.filter((b: any) => {
     if (filter === 'all') return true;
-    const st = (b.status || b.tip || '').toLowerCase();
-    if (filter === 'upcoming') return st.includes('predstojeć') || st === 'upcoming';
-    if (filter === 'completed') return st.includes('završen') || st === 'completed';
-    if (filter === 'cancelled') return st.includes('otkazan') || st === 'cancelled';
-    return true;
+    return b._status === filter;
   });
 
   return (
@@ -766,11 +702,9 @@ function BookingsSection() {
 
       {filtered.length === 0 ? <Text style={s.emptyText}>Nema rezervacija</Text> :
         filtered.map((b: any) => {
-          const st = (b.status || b.tip || 'upcoming').toLowerCase();
+          const st = b._status || 'upcoming';
           const color = statusColors[st] || Colors.muted;
-          const label = st.includes('predstojeć') || st === 'upcoming' ? 'Predstojeći' :
-            st.includes('završen') || st === 'completed' ? 'Završeni' :
-            st.includes('otkazan') || st === 'cancelled' ? 'Otkazani' : st;
+          const label = st === 'upcoming' ? 'Predstojeći' : st === 'completed' ? 'Završeni' : st === 'cancelled' ? 'Otkazani' : st;
           return (
             <View key={b.id || b._id} style={s.bookingCard}>
               <View style={s.bookingInfo}>
@@ -782,7 +716,7 @@ function BookingsSection() {
               <View style={[s.statusBadge, { backgroundColor: color + '20' }]}>
                 <Text style={[s.statusText, { color }]}>{label}</Text>
               </View>
-              {(st.includes('predstojeć') || st === 'upcoming') && (
+              {st === 'upcoming' && (
                 <TouchableOpacity onPress={() => cancelBooking(b.id || b._id)} style={s.cancelBtn}>
                   <Feather name="x-circle" size={16} color={Colors.danger} />
                 </TouchableOpacity>
@@ -845,11 +779,16 @@ function UsersSection() {
   };
 
   const deductSession = async (userId: string) => {
-    try {
-      await api.post(`/api/admin/users/${userId}/deduct-session`, {});
-      Alert.alert('Uspješno', 'Termin je oduzet');
-      await load();
-    } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+    Alert.alert('Oduzmi termin', 'Da li ste sigurni da želite oduzeti termin?', [
+      { text: 'Ne', style: 'cancel' },
+      { text: 'Da, oduzmi', style: 'destructive', onPress: async () => {
+        try {
+          await api.post(`/api/admin/users/${userId}/deduct-session`, {});
+          Alert.alert('Uspješno', 'Termin je oduzet');
+          await load();
+        } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+      }},
+    ]);
   };
 
   const freezeUser = async (userId: string) => {
@@ -865,8 +804,8 @@ function UsersSection() {
   const addMembership = async () => {
     if (!memberModal || !selectedPkg) return;
     try {
-      await api.post(`/api/admin/users/${memberModal.user_id}/add-membership`, { package_id: selectedPkg });
-      Alert.alert('Uspješno', 'Članarina dodana');
+      const result = await api.post(`/api/admin/users/${memberModal.user_id}/add-membership`, { package_id: selectedPkg });
+      Alert.alert('Uspješno', result.message || 'Članarina dodana');
       setMemberModal(null); setSelectedPkg('');
       await load();
     } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
@@ -1162,6 +1101,9 @@ const s = StyleSheet.create({
   pkgOptionTextActive: { color: Colors.primary, fontFamily: Fonts.bodySemiBold },
   // Warning row
   warningRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  todayRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  todayTime: { backgroundColor: Colors.primary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  todayTimeText: { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.white },
   // Package requests
   requestRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   requestInfo: { flex: 1 },

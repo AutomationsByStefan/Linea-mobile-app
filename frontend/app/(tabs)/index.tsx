@@ -66,7 +66,13 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const nextTraining = trainings[0];
+  const nextTraining = trainings.length > 0
+    ? trainings.sort((a: any, b: any) => {
+        const da = `${a.datum || a.date}T${a.vrijeme || a.time || '00:00'}`;
+        const db = `${b.datum || b.date}T${b.vrijeme || b.time || '00:00'}`;
+        return da.localeCompare(db);
+      })[0]
+    : null;
   const activeMembership = memberships[0];
   const pendingReq = pendingRequests.find((r: any) => r.status === 'pending' || r.status === 'na_cekanju');
 
@@ -132,9 +138,15 @@ export default function HomeScreen() {
             <View style={styles.card} testID="active-membership-card">
               <View style={styles.membershipRow}>
                 <Text style={styles.membershipName}>{activeMembership.package_name || activeMembership.naziv}</Text>
-                <Text style={styles.membershipExpiry}>
-                  {activeMembership.datum_isteka ? formatDateBosnian(activeMembership.datum_isteka) : ''}
-                </Text>
+                <View style={[styles.memberBadge,
+                  ((activeMembership.preostali_termini ?? activeMembership.remaining ?? 0) > 0)
+                    ? styles.memberBadgeActive : styles.memberBadgeExpired]}>
+                  <Text style={[styles.memberBadgeText,
+                    ((activeMembership.preostali_termini ?? activeMembership.remaining ?? 0) > 0)
+                      ? styles.memberBadgeTextActive : styles.memberBadgeTextExpired]}>
+                    {(activeMembership.preostali_termini ?? activeMembership.remaining ?? 0) > 0 ? 'Aktivna' : 'Istekla'}
+                  </Text>
+                </View>
               </View>
               <Text style={styles.membershipTerms}>
                 Preostalo termina: <Text style={styles.goldText}>
@@ -315,9 +327,14 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   pendingText: { fontFamily: Fonts.bodyMedium, fontSize: Sizes.small, color: Colors.foreground, flex: 1 },
-  membershipRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  membershipRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   membershipName: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.foreground },
-  membershipExpiry: { fontFamily: Fonts.body, fontSize: Sizes.tiny, color: Colors.muted },
+  memberBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 },
+  memberBadgeActive: { backgroundColor: 'rgba(40,167,69,0.15)' },
+  memberBadgeExpired: { backgroundColor: 'rgba(220,53,69,0.15)' },
+  memberBadgeText: { fontFamily: Fonts.bodySemiBold, fontSize: 11 },
+  memberBadgeTextActive: { color: Colors.success },
+  memberBadgeTextExpired: { color: Colors.danger },
   membershipTerms: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.foreground, marginBottom: 12 },
   goldText: { fontFamily: Fonts.bodyBold, color: Colors.primary },
   progressBg: {
