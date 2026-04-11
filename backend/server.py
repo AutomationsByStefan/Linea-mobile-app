@@ -307,26 +307,64 @@ async def add_membership(request: Request, user_id: str):
         return JSONResponse({"detail": "Admin prijava je potrebna"}, 403)
     body = await request.json()
     pkg_id = body.get("package_id")
+    custom = body.get("custom")
+
+    # Standard package from dropdown
     if pkg_id and pkg_id != "custom":
+        # Try to create request and auto-approve on Railway
         try:
-            rr = await http_client.post(f"{EXTERNAL_API}/api/admin/package-requests", json={"user_id": user_id, "package_id": pkg_id}, cookies=ck)
+            rr = await http_client.post(f"{EXTERNAL_API}/api/admin/package-requests",
+                                        json={"user_id": user_id, "package_id": pkg_id}, cookies=ck)
             if rr.status_code == 200:
                 rd = rr.json()
                 rid = rd.get('id', rd.get('request_id'))
                 if rid:
                     ar = await http_client.post(f"{EXTERNAL_API}/api/admin/package-requests/{rid}/approve", cookies=ck)
-                    return ar.json() if ar.status_code == 200 else {"detail": "Greška pri odobravanju"}
-        except Exception as e:
-            return JSONResponse({"detail": str(e)}, 500)
-    elif body.get("custom"):
-        c = body["custom"]
-        doc = {"id": str(uuid.uuid4()), "user_id": user_id, "name": c.get("name", "Custom"),
-               "price": c.get("price", 0), "sessions": c.get("sessions", 0),
-               "duration": c.get("duration", 30), "created_at": datetime.now(timezone.utc).isoformat(), "status": "active"}
+                    if ar.status_code == 200:
+                        return ar.json()
+                    return {"success": True, "message": "Zahtjev kreiran, čeka odobravanje"}
+            # If Railway doesn't support admin package-request creation, store locally
+            error_body = rr.json() if rr.headers.get('content-type', '').startswith('application/json') else {}
+            if 'detail' in error_body:
+                # Railway returned an error, try direct membership creation
+                pass
+        except:
+            pass
+
+        # Fallback: create membership directly in local MongoDB
+        packages = await railway_get("/api/packages", ck)
+        pkg = next((p for p in (packages if isinstance(packages, list) else [])
+                     if p.get('id') == pkg_id), None)
+        if pkg:
+            doc = {
+                "id": str(uuid.uuid4()), "user_id": user_id,
+                "name": pkg.get('naziv', pkg.get('name', 'Paket')),
+                "price": pkg.get('cijena', pkg.get('price', 0)),
+                "sessions": pkg.get('termini', pkg.get('sessions', 0)),
+                "duration": 35, "status": "active",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.custom_memberships.insert_one(doc)
+            doc.pop("_id", None)
+            return {"success": True, "message": f"Članarina dodana: {doc['name']}"}
+        return JSONResponse({"detail": "Paket nije pronađen"}, 404)
+
+    # Custom package
+    elif custom:
+        doc = {
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "name": custom.get("name", "Custom"),
+            "price": custom.get("price", 0),
+            "sessions": custom.get("sessions", 0),
+            "duration": custom.get("duration", 35),
+            "status": "active",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
         await db.custom_memberships.insert_one(doc)
         doc.pop("_id", None)
         return {"success": True, "message": f"Članarina kreirana: {doc['name']}"}
-    return JSONResponse({"detail": "Nedostaju parametri"}, 400)
+
+    return JSONResponse({"detail": "Odaberite paket ili unesite custom detalje"}, 400)
 
 
 # --- SCHEDULE GENERATE ---
@@ -362,24 +400,29 @@ async def generate_schedule(request: Request):
     return {"success": True, "created": created, "message": f"Generisano {created} termina"}
 
 
-# --- SCHEDULE DELETE SLOT ---
+# --- SCHEDULE DELETE SLOT — direct MongoDB ---
 @app.delete("/api/admin/schedule/{slot_id}")
 async def admin_delete_slot(request: Request, slot_id: str):
     ck = dict(request.cookies)
     if not await check_admin(ck):
         return JSONResponse({"detail": "Admin prijava je potrebna"}, 403)
+    # Try Railway API first
     try:
         r = await http_client.delete(f"{EXTERNAL_API}/api/admin/schedule/{slot_id}", cookies=ck)
         if r.status_code in (200, 204):
             return {"success": True, "message": "Termin obrisan"}
     except:
         pass
-    await db.deleted_slots.insert_one({"slot_id": slot_id, "deleted_at": datetime.now(timezone.utc).isoformat(),
-                                       "deleted_by": (await check_admin(ck) or {}).get("user_id")})
-    return {"success": True, "message": "Termin označen za brisanje"}
+    # Direct MongoDB delete
+    result = await db.schedule.delete_one({"id": slot_id})
+    if result.deleted_count == 0:
+        result = await db.slots.delete_one({"id": slot_id})
+    # Also mark in deleted_slots for tracking
+    await db.deleted_slots.insert_one({"slot_id": slot_id, "deleted_at": datetime.now(timezone.utc).isoformat()})
+    return {"success": True, "message": "Termin obrisan"}
 
 
-# --- SCHEDULE DELETE DAY ---
+# --- SCHEDULE DELETE DAY — direct MongoDB ---
 @app.post("/api/admin/schedule/delete-day")
 async def admin_delete_day(request: Request):
     ck = dict(request.cookies)
@@ -390,9 +433,11 @@ async def admin_delete_day(request: Request):
     datum = body.get("datum")
     if not datum:
         return JSONResponse({"detail": "Datum je obavezan"}, 400)
+
+    deleted = 0
+    # Try Railway API
     schedule = await railway_get("/api/admin/schedule", ck)
     day_slots = [s for s in (schedule if isinstance(schedule, list) else []) if s.get('datum') == datum]
-    deleted = 0
     for slot in day_slots:
         sid = slot.get('id')
         if not sid:
@@ -404,9 +449,134 @@ async def admin_delete_day(request: Request):
                 continue
         except:
             pass
-        await db.deleted_slots.insert_one({"slot_id": sid, "deleted_at": datetime.now(timezone.utc).isoformat(), "deleted_by": admin.get("user_id")})
+        # Direct MongoDB delete
+        await db.schedule.delete_one({"id": sid})
+        await db.slots.delete_one({"id": sid})
         deleted += 1
-    return {"success": True, "deleted": deleted, "message": f"Obrisano {deleted} termina za {datum}"}
+
+    # Also delete directly from MongoDB by datum
+    r1 = await db.schedule.delete_many({"datum": datum})
+    r2 = await db.slots.delete_many({"datum": datum})
+    deleted += r1.deleted_count + r2.deleted_count
+
+    await db.deleted_slots.insert_one({"datum": datum, "deleted_at": datetime.now(timezone.utc).isoformat(),
+                                       "deleted_by": admin.get("user_id"), "type": "day"})
+    return {"success": True, "deleted": deleted, "message": f"Obrisano termina za {datum}"}
+
+
+# --- FREEZE USER MEMBERSHIP ---
+@app.post("/api/admin/users/{user_id}/freeze")
+async def freeze_user(request: Request, user_id: str):
+    ck = dict(request.cookies)
+    admin = await check_admin(ck)
+    if not admin:
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, 403)
+    body = await request.json()
+    start_date = body.get("start_date", date.today().isoformat())
+    end_date = body.get("end_date", (date.today() + timedelta(days=7)).isoformat())
+
+    # Try Railway API first
+    try:
+        r = await http_client.post(f"{EXTERNAL_API}/api/admin/users/{user_id}/freeze",
+                                   json={"start_date": start_date, "end_date": end_date}, cookies=ck)
+        if r.status_code == 200:
+            return r.json()
+    except:
+        pass
+
+    # Direct MongoDB
+    await db.frozen_users.update_one(
+        {"user_id": user_id},
+        {"$set": {"user_id": user_id, "start_date": start_date, "end_date": end_date,
+                  "frozen_at": datetime.now(timezone.utc).isoformat(), "frozen_by": admin.get("user_id"),
+                  "is_frozen": True}},
+        upsert=True
+    )
+    return {"success": True, "message": f"Korisnik zamrznut od {start_date} do {end_date}"}
+
+
+# --- UNFREEZE USER MEMBERSHIP ---
+@app.post("/api/admin/users/{user_id}/unfreeze")
+async def unfreeze_user(request: Request, user_id: str):
+    ck = dict(request.cookies)
+    if not await check_admin(ck):
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, 403)
+
+    # Try Railway API
+    try:
+        r = await http_client.post(f"{EXTERNAL_API}/api/admin/users/{user_id}/unfreeze", json={}, cookies=ck)
+        if r.status_code == 200:
+            return r.json()
+    except:
+        pass
+
+    # Direct MongoDB
+    await db.frozen_users.update_one(
+        {"user_id": user_id},
+        {"$set": {"is_frozen": False, "unfrozen_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"success": True, "message": "Korisnik odmrznut"}
+
+
+# --- GET ALL USERS (including archived) ---
+@app.get("/api/admin/all-users")
+async def admin_all_users(request: Request):
+    ck = dict(request.cookies)
+    if not await check_admin(ck):
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, 403)
+
+    # Get active users from Railway
+    users = await railway_get("/api/admin/users", ck)
+    users_list = users if isinstance(users, list) else []
+
+    # Mark all as not archived
+    for u in users_list:
+        u["is_archived"] = False
+
+    # Get archived users from local MongoDB
+    archived = await db.archived_users.find({}, {"_id": 0}).to_list(500)
+    for a in archived:
+        users_list.append({
+            "user_id": a.get("user_id", ""),
+            "name": a.get("name", a.get("user_data", {}).get("name", "")),
+            "phone": a.get("phone", a.get("user_data", {}).get("phone", "")),
+            "email": a.get("email", a.get("user_data", {}).get("email", "")),
+            "created_at": a.get("user_data", {}).get("created_at", a.get("archived_at", "")),
+            "archived_at": a.get("archived_at", ""),
+            "is_archived": True,
+            "status": "archived",
+            "aktivna_clanarina": False,
+            "naziv_paketa": "-",
+            "preostali_termini": 0,
+            "ukupni_termini": 0,
+        })
+
+    # Get frozen status from local MongoDB
+    frozen = await db.frozen_users.find({"is_frozen": True}, {"_id": 0}).to_list(500)
+    frozen_ids = {f.get("user_id") for f in frozen}
+    for u in users_list:
+        if u.get("user_id") in frozen_ids:
+            u["is_frozen"] = True
+
+    return users_list
+
+
+# --- TODAY TRAININGS ---
+@app.get("/api/admin/today-trainings")
+async def today_trainings(request: Request):
+    ck = dict(request.cookies)
+    if not await check_admin(ck):
+        return JSONResponse({"detail": "Admin prijava je potrebna"}, 403)
+
+    bookings = await railway_get("/api/admin/bookings", ck)
+    bl = bookings if isinstance(bookings, list) else []
+    today = date.today().isoformat()
+
+    today_bk = [b for b in bl if (b.get('datum') or b.get('date', '')) == today
+                and (b.get('tip', b.get('status', '')) or '').lower() not in ('otkazani', 'cancelled')]
+    today_bk.sort(key=lambda b: b.get('vrijeme', b.get('time', '00:00')))
+
+    return today_bk
 
 
 # --- TRAINING CANCEL (client) ---
