@@ -208,7 +208,7 @@ function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) 
       {/* Stats Cards — clickable */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.statsRow}>
         {[
-          { label: 'Korisnici', value: stats?.total_users || 0, icon: 'users', color: '#7C3AED' },
+          { label: 'Korisnici', value: allUsers.length || stats?.total_users || 0, icon: 'users', color: '#7C3AED' },
           { label: 'Aktivne članarine', value: stats?.active_memberships || 0, icon: 'credit-card', color: '#059669' },
           { label: 'Današnji treninzi', value: stats?.today_trainings || 0, icon: 'calendar', color: Colors.primary },
           { label: 'Zahtjevi na čekanju', value: stats?.pending_requests || 0, icon: 'clock', color: '#2563EB' },
@@ -638,8 +638,9 @@ function ScheduleSection() {
       { text: 'Da, obriši dan', style: 'destructive', onPress: async () => {
         try {
           const res = await api.post('/api/admin/schedule/delete-day', { datum });
+          // Remove deleted day from local state immediately
+          setSlots(prev => prev.filter(sl => sl.datum !== datum));
           Alert.alert('Obrisano', res.message || 'Dan obrisan');
-          await load();
         } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
       }},
     ]);
@@ -797,6 +798,10 @@ function UsersSection() {
   const [memberModal, setMemberModal] = useState<any>(null);
   const [selectedPkg, setSelectedPkg] = useState('');
   const [packages, setPackages] = useState<any[]>([]);
+  const [freezeModal, setFreezeModal] = useState<any>(null);
+  const [freezeFrom, setFreezeFrom] = useState('');
+  const [freezeTo, setFreezeTo] = useState('');
+  const [freezeReason, setFreezeReason] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -846,12 +851,24 @@ function UsersSection() {
     ]);
   };
 
-  const freezeUser = async (userId: string) => {
-    const start = new Date().toISOString().slice(0, 10);
-    const end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const freezeUser = async () => {
+    if (!freezeModal || !freezeFrom || !freezeTo) {
+      Alert.alert('Greška', 'Unesite datume zamrzavanja');
+      return;
+    }
     try {
-      await api.post(`/api/admin/users/${userId}/freeze`, { start_date: start, end_date: end });
-      Alert.alert('Uspješno', 'Korisnik zamrznut na 7 dana');
+      await api.post(`/api/admin/users/${freezeModal.user_id}/freeze`, {
+        start_date: freezeFrom, end_date: freezeTo, reason: freezeReason });
+      Alert.alert('Uspješno', `Korisnik zamrznut od ${freezeFrom} do ${freezeTo}`);
+      setFreezeModal(null); setFreezeFrom(''); setFreezeTo(''); setFreezeReason('');
+      await load();
+    } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+  };
+
+  const unfreezeUser = async (userId: string) => {
+    try {
+      await api.post(`/api/admin/users/${userId}/unfreeze`, {});
+      Alert.alert('Uspješno', 'Korisnik odmrznut');
       await load();
     } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
   };
@@ -922,9 +939,16 @@ function UsersSection() {
                     <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#F97316' }]} onPress={() => deductSession(u.user_id)}>
                       <Feather name="minus-circle" size={14} color="#FFF" /><Text style={s.actionBtnText}>Oduzmi termin</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#3B82F6' }]} onPress={() => freezeUser(u.user_id)}>
-                      <Feather name="pause-circle" size={14} color="#FFF" /><Text style={s.actionBtnText}>Zamrzni</Text>
-                    </TouchableOpacity>
+                    {u.is_frozen ? (
+                      <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#059669' }]} onPress={() => unfreezeUser(u.user_id)}>
+                        <Feather name="sun" size={14} color="#FFF" /><Text style={s.actionBtnText}>Odmrzni</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#3B82F6' }]}
+                        onPress={() => { setFreezeModal(u); setFreezeFrom(new Date().toISOString().slice(0,10)); setFreezeTo(new Date(Date.now()+7*86400000).toISOString().slice(0,10)); }}>
+                        <Feather name="pause-circle" size={14} color="#FFF" /><Text style={s.actionBtnText}>Zamrzni</Text>
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#10B981' }]} onPress={() => setMemberModal(u)}>
                       <Feather name="plus-circle" size={14} color="#FFF" /><Text style={s.actionBtnText}>Dodaj članarinu</Text>
                     </TouchableOpacity>
@@ -1031,11 +1055,39 @@ function UsersSection() {
           </View>
         </View>
       </Modal>
+
+      {/* Freeze Modal */}
+      <Modal visible={!!freezeModal} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Zamrzni članarinu</Text>
+              <TouchableOpacity onPress={() => setFreezeModal(null)}><Feather name="x" size={22} color={Colors.foreground} /></TouchableOpacity>
+            </View>
+            <Text style={s.userSub}>Korisnik: {freezeModal?.name}</Text>
+            <Text style={[s.expandedLabel, { marginTop: 16 }]}>Od (YYYY-MM-DD)</Text>
+            <TextInput style={s.modalInput} placeholder="2026-04-12" placeholderTextColor={Colors.muted}
+              value={freezeFrom} onChangeText={setFreezeFrom} />
+            <Text style={s.expandedLabel}>Do (YYYY-MM-DD)</Text>
+            <TextInput style={s.modalInput} placeholder="2026-04-19" placeholderTextColor={Colors.muted}
+              value={freezeTo} onChangeText={setFreezeTo} />
+            <Text style={s.expandedLabel}>Razlog</Text>
+            <TextInput style={s.modalInput} placeholder="Razlog zamrzavanja..." placeholderTextColor={Colors.muted}
+              value={freezeReason} onChangeText={setFreezeReason} />
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalBtnCancel} onPress={() => setFreezeModal(null)}>
+                <Text style={s.modalBtnCancelText}>Odustani</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.modalBtnConfirm} onPress={freezeUser}>
+                <Text style={s.modalBtnConfirmText}>Zamrzni</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
-
-// ============= STYLES =============
 const s = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },

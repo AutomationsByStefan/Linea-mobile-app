@@ -84,7 +84,7 @@ export default function TezinaScreen() {
 
   const points = chartEntries.map((e: any, i: number) => `${getX(i)},${getY(e.weight || e.tezina || 0)}`).join(' ');
 
-  // Trend
+  // Trend — compare last vs first entry
   let trendText = '';
   let trendColor = Colors.muted;
   let trendIcon: 'trending-down' | 'trending-up' | 'minus' = 'minus';
@@ -92,11 +92,11 @@ export default function TezinaScreen() {
     const diff = weights[weights.length - 1] - weights[0];
     if (diff < -0.1) {
       trendText = `Smanjenje od ${Math.abs(diff).toFixed(1)} kg`;
-      trendColor = Colors.success;
+      trendColor = Colors.success; // green = good (weight loss)
       trendIcon = 'trending-down';
     } else if (diff > 0.1) {
       trendText = `Povećanje od ${diff.toFixed(1)} kg`;
-      trendColor = Colors.warning;
+      trendColor = Colors.danger; // red = weight gain
       trendIcon = 'trending-up';
     } else {
       trendText = 'Bez promjene';
@@ -217,7 +217,7 @@ export default function TezinaScreen() {
                 </View>
                 <Feather name={arrow} size={18} color={
                   arrow === 'trending-down' ? Colors.success :
-                  arrow === 'trending-up' ? Colors.warning : Colors.muted
+                  arrow === 'trending-up' ? Colors.danger : Colors.muted
                 } />
                 <TouchableOpacity testID={`delete-weight-${id}`} onPress={() => handleDelete(id)} style={styles.deleteBtn}>
                   <Feather name="trash-2" size={16} color={Colors.danger} />
