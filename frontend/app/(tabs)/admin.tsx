@@ -571,7 +571,7 @@ function ScheduleSection() {
     Alert.alert('Obriši termin', 'Da li ste sigurni?', [
       { text: 'Ne', style: 'cancel' },
       { text: 'Da, obriši', style: 'destructive', onPress: async () => {
-        try { await api.delete(`/api/admin/schedule/${id}`); await load(); }
+        try { await api.delete(`/api/admin/schedule/slots/${id}`); await load(); }
         catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
       }},
     ]);
