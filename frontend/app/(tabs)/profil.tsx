@@ -23,6 +23,11 @@ export default function ProfilScreen() {
   const [deleting, setDeleting] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
+  // Load profile photo from user data
+  useEffect(() => {
+    if (user?.profile_photo) setAvatarUri(user.profile_photo);
+  }, [user?.profile_photo]);
+
   const pickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -34,9 +39,18 @@ export default function ProfilScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.5,
+      base64: true,
     });
     if (!result.canceled && result.assets[0]) {
-      setAvatarUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      setAvatarUri(asset.uri);
+      // Upload base64 to server
+      if (asset.base64) {
+        try {
+          const base64Data = `data:image/jpeg;base64,${asset.base64}`;
+          await api.post('/api/user/profile-photo', { photo: base64Data });
+        } catch (e) { console.error('Photo upload error:', e); }
+      }
     }
   };
 

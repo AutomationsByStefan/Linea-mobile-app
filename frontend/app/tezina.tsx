@@ -84,12 +84,14 @@ export default function TezinaScreen() {
 
   const points = chartEntries.map((e: any, i: number) => `${getX(i)},${getY(e.weight || e.tezina || 0)}`).join(' ');
 
-  // Trend — compare last vs first entry
+  // Trend — compare latest entry with the one before it
   let trendText = '';
   let trendColor = Colors.muted;
   let trendIcon: 'trending-down' | 'trending-up' | 'minus' = 'minus';
   if (weights.length >= 2) {
-    const diff = weights[weights.length - 1] - weights[0];
+    const latest = weights[weights.length - 1];
+    const previous = weights[weights.length - 2];
+    const diff = latest - previous;
     if (diff < -0.1) {
       trendText = `Smanjenje od ${Math.abs(diff).toFixed(1)} kg`;
       trendColor = Colors.success; // green = good (weight loss)

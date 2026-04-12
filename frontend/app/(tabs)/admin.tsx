@@ -170,7 +170,7 @@ function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) 
               <View style={s.todayRow}>
                 <View style={s.todayTime}><Text style={s.todayTimeText}>{b.vrijeme || b.time}</Text></View>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.userName}>{b.user_name || b.name || 'Korisnik'}</Text>
+                  <Text style={s.userName}>{b.korisnik_ime || b.user_name || b.korisnik?.name || b.name || 'Korisnik'}</Text>
                   <Text style={s.userSub}>{b.user_email || b.user_phone || ''}</Text>
                 </View>
               </View>
@@ -283,7 +283,7 @@ function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) 
               <TouchableOpacity style={s.todayRow} onPress={() => setExpandedUserId(isExp ? null : uid)}>
                 <View style={s.todayTime}><Text style={s.todayTimeText}>{b.vrijeme || b.time}</Text></View>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.userName}>{b.user_name || b.name || 'Korisnik'}</Text>
+                  <Text style={s.userName}>{b.korisnik_ime || b.user_name || b.korisnik?.name || b.name || 'Korisnik'}</Text>
                   <Text style={s.userSub}>{b.user_email || ''}</Text>
                 </View>
                 <Feather name={isExp ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.muted} />
@@ -616,7 +616,7 @@ function ScheduleSection() {
 
   const generate = async () => {
     try {
-      const res = await api.post('/api/admin/schedule/generate', { days: 7 });
+      const res = await api.post('/api/admin/schedule/generate-week', { days: 14 });
       Alert.alert('Generisano', res.message || 'Termini generisani');
       await load();
     } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
@@ -626,8 +626,10 @@ function ScheduleSection() {
     Alert.alert('Obriši termin', 'Da li ste sigurni?', [
       { text: 'Ne', style: 'cancel' },
       { text: 'Da, obriši', style: 'destructive', onPress: async () => {
-        try { await api.delete(`/api/admin/schedule/slots/${id}`); await load(); }
-        catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+        try {
+          await api.delete(`/api/admin/schedule/slots/${id}`);
+          await load();
+        } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
       }},
     ]);
   };
@@ -637,10 +639,8 @@ function ScheduleSection() {
       { text: 'Ne', style: 'cancel' },
       { text: 'Da, obriši dan', style: 'destructive', onPress: async () => {
         try {
-          const res = await api.post('/api/admin/schedule/delete-day', { datum });
-          // Remove deleted day from local state immediately
-          setSlots(prev => prev.filter(sl => sl.datum !== datum));
-          Alert.alert('Obrisano', res.message || 'Dan obrisan');
+          await api.post('/api/admin/schedule/delete-day', { datum });
+          await load();
         } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
       }},
     ]);
@@ -764,7 +764,7 @@ function BookingsSection() {
           return (
             <View key={b.id || b._id} style={s.bookingCard}>
               <View style={s.bookingInfo}>
-                <Text style={s.userName}>{b.user_name || b.name || 'Korisnik'}</Text>
+                <Text style={s.userName}>{b.korisnik_ime || b.user_name || b.korisnik?.name || b.name || 'Korisnik'}</Text>
                 <Text style={s.userSub}>{b.user_email || b.email || ''}</Text>
               </View>
               <Text style={s.bookingDate}>{formatDD(b.datum || b.date)}</Text>
