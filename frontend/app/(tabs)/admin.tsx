@@ -52,7 +52,7 @@ export default function AdminScreen() {
         </ScrollView>
       </View>
 
-      {section === 'dashboard' && <DashboardSection />}
+      {section === 'dashboard' && <DashboardSection onNavigate={setSection} />}
       {section === 'finance' && <FinanceSection />}
       {section === 'schedule' && <ScheduleSection />}
       {section === 'bookings' && <BookingsSection />}
@@ -62,7 +62,7 @@ export default function AdminScreen() {
 }
 
 // ============= DASHBOARD =============
-function DashboardSection() {
+function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) {
   const [stats, setStats] = useState<any>(null);
   const [reminders, setReminders] = useState<any[]>([]);
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
@@ -73,6 +73,7 @@ function DashboardSection() {
   const [refreshing, setRefreshing] = useState(false);
   const [newReminder, setNewReminder] = useState('');
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [subScreen, setSubScreen] = useState<'main' | 'active_members' | 'today_trainings'>('main');
 
   const load = useCallback(async () => {
     try {
@@ -121,7 +122,65 @@ function DashboardSection() {
     try { await api.delete(`/api/admin/reminders/${id}`); await load(); } catch (e) { console.error(e); }
   };
 
-  if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
+  const activeMembers = allUsers.filter((u: any) => u.aktivna_clanarina);
+
+  const handleCardPress = (label: string) => {
+    if (label === 'Korisnici') onNavigate('users');
+    else if (label === 'Aktivne članarine') setSubScreen('active_members');
+    else if (label === 'Današnji treninzi') setSubScreen('today_trainings');
+    else if (label.startsWith('Prihod')) onNavigate('finance');
+    // 'Zahtjevi na čekanju' — no navigation
+  };
+
+  // === SUB-SCREEN: Aktivne članarine ===
+  if (subScreen === 'active_members') {
+    return (
+      <ScrollView style={s.flex} contentContainerStyle={s.content}>
+        <TouchableOpacity style={s.subScreenBack} onPress={() => setSubScreen('main')}>
+          <Feather name="arrow-left" size={20} color={Colors.foreground} />
+          <Text style={s.subScreenBackText}>Kontrolna tabla</Text>
+        </TouchableOpacity>
+        <Text style={s.sectionTitle}>Aktivne članarine ({activeMembers.length})</Text>
+        {activeMembers.length === 0 ? <Text style={s.emptyText}>Nema aktivnih članarina</Text> :
+          activeMembers.map((u: any) => (
+            <View key={u.user_id} style={s.card}>
+              <Text style={s.userName}>{u.name}</Text>
+              <Text style={s.userSub}>{u.naziv_paketa || '-'}</Text>
+              <Text style={[s.userSub, { color: Colors.primary, fontFamily: Fonts.bodySemiBold }]}>
+                Preostalo: {u.preostali_termini || 0}/{u.ukupni_termini || 0} termina
+              </Text>
+            </View>
+          ))}
+      </ScrollView>
+    );
+  }
+
+  // === SUB-SCREEN: Današnji treninzi ===
+  if (subScreen === 'today_trainings') {
+    return (
+      <ScrollView style={s.flex} contentContainerStyle={s.content}>
+        <TouchableOpacity style={s.subScreenBack} onPress={() => setSubScreen('main')}>
+          <Feather name="arrow-left" size={20} color={Colors.foreground} />
+          <Text style={s.subScreenBackText}>Kontrolna tabla</Text>
+        </TouchableOpacity>
+        <Text style={s.sectionTitle}>Današnji treninzi ({todayBookings.length})</Text>
+        {todayBookings.length === 0 ? <Text style={s.emptyText}>Nema zakazanih treninga za danas</Text> :
+          todayBookings.map((b: any) => (
+            <View key={b.id || b._id} style={s.card}>
+              <View style={s.todayRow}>
+                <View style={s.todayTime}><Text style={s.todayTimeText}>{b.vrijeme || b.time}</Text></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.userName}>{b.user_name || b.name || 'Korisnik'}</Text>
+                  <Text style={s.userSub}>{b.user_email || b.user_phone || ''}</Text>
+                </View>
+              </View>
+            </View>
+          ))}
+      </ScrollView>
+    );
+  }
+
+  // === MAIN DASHBOARD ===
 
   const approveRequest = async (id: string) => {
     try {
@@ -141,11 +200,6 @@ function DashboardSection() {
     ]);
   };
 
-  const setParentSection = (section: Section) => {
-    // Access the parent AdminScreen's setSection through a ref pattern
-    // For now, we use a simpler approach - the cards that need navigation use the section switcher
-  };
-
   return (
     <ScrollView style={s.flex} contentContainerStyle={s.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}>
@@ -160,13 +214,14 @@ function DashboardSection() {
           { label: 'Zahtjevi na čekanju', value: stats?.pending_requests || 0, icon: 'clock', color: '#2563EB' },
           { label: 'Prihod (mjesec)', value: `${stats?.monthly_income || 0} KM`, icon: 'dollar-sign', color: '#D97706' },
         ].map((c, i) => (
-          <View key={i} style={s.statCard}>
+          <TouchableOpacity key={i} style={s.statCard} onPress={() => handleCardPress(c.label)}
+            activeOpacity={c.label === 'Zahtjevi na čekanju' ? 1 : 0.7} testID={`stat-card-${i}`}>
             <View style={[s.statIcon, { backgroundColor: c.color + '20' }]}>
               <Feather name={c.icon as any} size={18} color={c.color} />
             </View>
             <Text style={s.statValue}>{c.value}</Text>
             <Text style={s.statLabel}>{c.label}</Text>
-          </View>
+          </TouchableOpacity>
         ))}
       </ScrollView>
 
@@ -1104,6 +1159,8 @@ const s = StyleSheet.create({
   todayRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   todayTime: { backgroundColor: Colors.primary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   todayTimeText: { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.white },
+  subScreenBack: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, marginTop: 8 },
+  subScreenBackText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.foreground },
   // Package requests
   requestRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   requestInfo: { flex: 1 },
