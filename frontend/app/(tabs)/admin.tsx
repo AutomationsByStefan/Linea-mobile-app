@@ -959,7 +959,7 @@ function UsersSection() {
                     <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#F97316' }]} onPress={() => deductSession(u.user_id)}>
                       <Feather name="minus-circle" size={14} color="#FFF" /><Text style={s.actionBtnText}>Oduzmi termin</Text>
                     </TouchableOpacity>
-                    {u.is_frozen ? (
+                    {(u.is_frozen || u.status === 'frozen') ? (
                       <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#059669' }]} onPress={() => unfreezeUser(u.user_id)}>
                         <Feather name="sun" size={14} color="#FFF" /><Text style={s.actionBtnText}>Odmrzni</Text>
                       </TouchableOpacity>
