@@ -72,8 +72,8 @@ export default function TezinaScreen() {
   // Chart
   const chartEntries = entries.slice(-10);
   const weights = chartEntries.map((e: any) => e.weight || e.tezina || 0);
-  const minW = Math.min(...weights) - 1;
-  const maxW = Math.max(...weights) + 1;
+  const minW = Math.min(...weights) - 2;
+  const maxW = Math.max(...weights) + 2;
   const chartW = 340;
   const chartH = 180;
   const padX = 40;
@@ -92,14 +92,14 @@ export default function TezinaScreen() {
     const latest = weights[weights.length - 1];
     const previous = weights[weights.length - 2];
     const diff = latest - previous;
-    if (diff < -0.1) {
-      trendText = `Smanjenje od ${Math.abs(diff).toFixed(1)} kg`;
-      trendColor = Colors.success; // green = good (weight loss)
-      trendIcon = 'trending-down';
-    } else if (diff > 0.1) {
-      trendText = `Povećanje od ${diff.toFixed(1)} kg`;
+    if (diff > 0.1) {
+      trendText = `Dobili ste ${diff.toFixed(1)} kg`;
       trendColor = Colors.danger; // red = weight gain
       trendIcon = 'trending-up';
+    } else if (diff < -0.1) {
+      trendText = `Izgubili ste ${Math.abs(diff).toFixed(1)} kg`;
+      trendColor = Colors.success; // green = weight loss
+      trendIcon = 'trending-down';
     } else {
       trendText = 'Bez promjene';
     }

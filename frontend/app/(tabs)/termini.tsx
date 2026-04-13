@@ -52,7 +52,6 @@ export default function TerminiScreen() {
   const [booking, setBooking] = useState(false);
   const [confirmSlot, setConfirmSlot] = useState<any>(null);
   const [shareInfo, setShareInfo] = useState<any>(null);
-  const [trialToast, setTrialToast] = useState('');
 
   const loadData = useCallback(async () => {
     try {
@@ -111,18 +110,13 @@ export default function TerminiScreen() {
       setConfirmSlot(null);
 
       if (res.is_trial) {
-        setTrialToast('Čestitamo! Izabrali ste svoj besplatni probni trening!');
-        setTimeout(() => setTrialToast(''), 5000);
-        const free = (slot.slobodna_mjesta || slot.available_spots || 0) - 1;
-        if (free > 0) {
-          setTimeout(() => setShareInfo({ training_id: res.training_id, slot }), 1500);
-        }
-      } else {
-        const free = (slot.slobodna_mjesta || slot.available_spots || 0) - 1;
-        // Only show share if there are still spots left after this booking
-        if (free > 0) {
-          setShareInfo({ training_id: res.training_id, slot });
-        }
+        // Trial handled by admin — no special UI for users
+      }
+      
+      const free = (slot.slobodna_mjesta || slot.available_spots || 0) - 1;
+      // Only show share if there are still spots left after this booking
+      if (free > 0) {
+        setShareInfo({ training_id: res.training_id, slot });
       }
 
       await loadData();
@@ -251,14 +245,6 @@ export default function TerminiScreen() {
           </View>
         )}
       </ScrollView>
-
-      {/* Trial Toast */}
-      {trialToast ? (
-        <View style={st.toast}>
-          <Feather name="award" size={20} color={Colors.white} />
-          <Text style={st.toastText}>{trialToast}</Text>
-        </View>
-      ) : null}
 
       {/* Confirm Modal */}
       <Modal visible={!!confirmSlot} transparent animationType="fade">

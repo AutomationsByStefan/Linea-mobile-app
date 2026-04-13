@@ -134,6 +134,7 @@ function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) 
 
   // === SUB-SCREEN: Aktivne članarine ===
   if (subScreen === 'active_members') {
+    const inactiveUsers = allUsers.filter((u: any) => !u.aktivna_clanarina);
     return (
       <ScrollView style={s.flex} contentContainerStyle={s.content}>
         <TouchableOpacity style={s.subScreenBack} onPress={() => setSubScreen('main')}>
@@ -144,11 +145,30 @@ function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) 
         {activeMembers.length === 0 ? <Text style={s.emptyText}>Nema aktivnih članarina</Text> :
           activeMembers.map((u: any) => (
             <View key={u.user_id} style={s.card}>
-              <Text style={s.userName}>{u.name}</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <Text style={s.userName}>{u.name}</Text>
+                <View style={[s.activeBadge]}><Text style={s.activeBadgeText}>Aktivna</Text></View>
+              </View>
               <Text style={s.userSub}>{u.naziv_paketa || '-'}</Text>
               <Text style={[s.userSub, { color: Colors.primary, fontFamily: Fonts.bodySemiBold }]}>
                 Preostalo: {u.preostali_termini || 0}/{u.ukupni_termini || 0} termina
               </Text>
+              {u.datum_isteka && <Text style={s.userSub}>Ističe: {formatDD(u.datum_isteka)}</Text>}
+            </View>
+          ))}
+
+        <Text style={[s.sectionTitle, { marginTop: 24 }]}>Neaktivni korisnici ({inactiveUsers.length})</Text>
+        {inactiveUsers.length === 0 ? <Text style={s.emptyText}>Nema neaktivnih korisnika</Text> :
+          inactiveUsers.map((u: any) => (
+            <View key={u.user_id} style={[s.card, { opacity: 0.7 }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <Text style={s.userName}>{u.name}</Text>
+                <View style={[s.activeBadge, s.inactiveBadge]}><Text style={[s.activeBadgeText, { color: Colors.muted }]}>Neaktivan</Text></View>
+              </View>
+              <Text style={s.userSub}>{u.phone}</Text>
+              {u.last_activity && <Text style={s.userSub}>Zadnja aktivnost: {formatDD(u.last_activity)}</Text>}
+              {u.naziv_paketa && u.naziv_paketa !== '-' && <Text style={s.userSub}>Prethodni paket: {u.naziv_paketa}</Text>}
+              {u.datum_isteka && <Text style={s.userSub}>Istekao: {formatDD(u.datum_isteka)}</Text>}
             </View>
           ))}
       </ScrollView>
@@ -460,29 +480,29 @@ function FinanceSection() {
         <>
           <Text style={s.sectionTitle}>Statistika termina</Text>
           <View style={s.statsRow}>
-            <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.avg_occupancy}%</Text><Text style={s.miniStatLabel}>Prosječna popunjenost</Text></View>
+            <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.avg_occupancy}%</Text><Text style={s.miniStatLabel}>Prosječna popunjenost (od početka)</Text></View>
             <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.total_bookings}</Text><Text style={s.miniStatLabel}>Ukupno rezervacija</Text></View>
             <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.cancellations}</Text><Text style={s.miniStatLabel}>Otkazivanja</Text></View>
           </View>
 
           <View style={s.card}>
-            <Text style={s.cardTitle}>Najpopularniji dani</Text>
+            <Text style={s.cardTitle}>Najpopularniji dani (po broju rezervacija)</Text>
             {(slotAnalytics.day_popularity || []).map((d: any) => (
               <View key={d.day} style={s.barRow}>
                 <Text style={s.barLabel}>{d.day}</Text>
                 <View style={s.barBg}><View style={[s.barFill, { width: `${Math.max(d.percentage, 2)}%` }]} /></View>
-                <Text style={s.barValue}>{d.percentage}%</Text>
+                <Text style={s.barValue}>{d.bookings}</Text>
               </View>
             ))}
           </View>
 
           <View style={s.card}>
-            <Text style={s.cardTitle}>Popunjenost po terminima</Text>
+            <Text style={s.cardTitle}>Najpopularniji termini (po broju rezervacija)</Text>
             {(slotAnalytics.time_ranking || []).map((t: any) => (
               <View key={t.time} style={s.barRow}>
                 <Text style={s.barLabel}>{t.time}</Text>
                 <View style={s.barBg}><View style={[s.barFill, { width: `${Math.max(t.occupancy, 2)}%` }]} /></View>
-                <Text style={s.barValue}>{t.occupancy}%</Text>
+                <Text style={s.barValue}>{t.occupied}</Text>
               </View>
             ))}
           </View>
