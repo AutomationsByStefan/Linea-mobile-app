@@ -18,9 +18,8 @@ WebBrowser.maybeCompleteAuthSession();
 
 const LOGO_URL = 'https://customer-assets.emergentagent.com/job_pilates-hub-12/artifacts/ny62z2sx_linea.png';
 
-// Google OAuth — Web Application Client ID (works for both Android and iOS)
+// Google OAuth — Web Application Client ID
 const GOOGLE_CLIENT_ID = '1085993530181-g4cnkler2rr97b1sob4b57biqfj15id3.apps.googleusercontent.com';
-const GOOGLE_REDIRECT_URI = 'https://auth.expo.io/@creativetechologies/linea-pilates';
 
 const discovery = {
   authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -42,12 +41,15 @@ export default function LoginScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Build redirect URI dynamically using app scheme
+  const redirectUri = AuthSession.makeRedirectUri({ scheme: 'com.lineapilates.app', path: 'auth' });
+
   // Google Auth — implicit flow, no PKCE
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: GOOGLE_CLIENT_ID,
       scopes: ['profile', 'email'],
-      redirectUri: GOOGLE_REDIRECT_URI,
+      redirectUri,
       responseType: 'token' as any,
       usePKCE: false,
     },
