@@ -18,10 +18,9 @@ WebBrowser.maybeCompleteAuthSession();
 
 const LOGO_URL = 'https://customer-assets.emergentagent.com/job_pilates-hub-12/artifacts/ny62z2sx_linea.png';
 
-// Google OAuth config — platform-specific Client IDs
-const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID || '';
-const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS || '';
-const GOOGLE_CLIENT_ID = Platform.OS === 'ios' ? GOOGLE_IOS_CLIENT_ID : GOOGLE_WEB_CLIENT_ID;
+// Google OAuth — Web Application Client ID (works for both Android and iOS)
+const GOOGLE_CLIENT_ID = '1085993530181-g4cnkler2rr97b1sob4b57biqfj15id3.apps.googleusercontent.com';
+const GOOGLE_REDIRECT_URI = 'https://auth.expo.io/@creativetechologies/linea-pilates';
 
 const discovery = {
   authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -43,13 +42,12 @@ export default function LoginScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Google Auth request — using implicit flow (token response, no PKCE)
-  const redirectUri = AuthSession.makeRedirectUri({ preferLocalhost: false });
+  // Google Auth — implicit flow, no PKCE
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: GOOGLE_CLIENT_ID,
       scopes: ['profile', 'email'],
-      redirectUri,
+      redirectUri: GOOGLE_REDIRECT_URI,
       responseType: 'token' as any,
       usePKCE: false,
     },
