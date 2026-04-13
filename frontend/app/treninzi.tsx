@@ -110,7 +110,9 @@ export default function TreninziScreen() {
               setUpcoming(prev => prev.filter((t: any) => (t.id || t._id || t.training_id) !== tid));
               Alert.alert('Uspješno', 'Trening je otkazan');
               // Then reload from server
-              await loadData();
+              await api.post(`/api/trainings/${tid}/cancel`, { type: cancelType });
+setUpcoming(prev => prev.filter((t: any) => (t.id || t._id || t.training_id) !== tid));
+Alert.alert('Uspješno', 'Trening je otkazan');
             } catch (e: any) {
               Alert.alert('Greška', e.message || 'Nije moguće otkazati trening');
             } finally {
