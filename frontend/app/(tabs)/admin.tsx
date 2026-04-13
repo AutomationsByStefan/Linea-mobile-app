@@ -818,6 +818,7 @@ function UsersSection() {
   const [memberModal, setMemberModal] = useState<any>(null);
   const [selectedPkg, setSelectedPkg] = useState('');
   const [packages, setPackages] = useState<any[]>([]);
+  const [memberStartDate, setMemberStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [freezeModal, setFreezeModal] = useState<any>(null);
   const [freezeFrom, setFreezeFrom] = useState('');
   const [freezeTo, setFreezeTo] = useState('');
@@ -896,9 +897,12 @@ function UsersSection() {
   const addMembership = async () => {
     if (!memberModal || !selectedPkg) return;
     try {
-      const result = await api.post(`/api/admin/users/${memberModal.user_id}/add-membership`, { package_id: selectedPkg });
+      const result = await api.post(`/api/admin/users/${memberModal.user_id}/add-membership`, {
+        package_id: selectedPkg,
+        start_date: memberStartDate,
+      });
       Alert.alert('Uspješno', result.message || 'Članarina dodana');
-      setMemberModal(null); setSelectedPkg('');
+      setMemberModal(null); setSelectedPkg(''); setMemberStartDate(new Date().toISOString().slice(0, 10));
       await load();
     } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
   };
@@ -1054,6 +1058,10 @@ function UsersSection() {
           <View style={s.modalContent}>
             <Text style={s.modalTitle}>Dodaj članarinu</Text>
             <Text style={s.userSub}>Korisnik: {memberModal?.name}</Text>
+            <Text style={[s.expandedLabel, { marginTop: 12 }]}>Datum početka (YYYY-MM-DD)</Text>
+            <TextInput style={s.modalInput} placeholder="2026-04-13" placeholderTextColor={Colors.muted}
+              value={memberStartDate} onChangeText={setMemberStartDate} />
+            <Text style={s.expandedLabel}>Odaberi paket</Text>
             <View style={s.pkgList}>
               {packages.map((p: any) => (
                 <TouchableOpacity key={p.id} style={[s.pkgOption, selectedPkg === p.id && s.pkgOptionActive]}
@@ -1065,7 +1073,7 @@ function UsersSection() {
               ))}
             </View>
             <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalBtnCancel} onPress={() => { setMemberModal(null); setSelectedPkg(''); }}>
+              <TouchableOpacity style={s.modalBtnCancel} onPress={() => { setMemberModal(null); setSelectedPkg(''); setMemberStartDate(new Date().toISOString().slice(0, 10)); }}>
                 <Text style={s.modalBtnCancelText}>Odustani</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[s.modalBtnConfirm, !selectedPkg && { opacity: 0.5 }]} onPress={addMembership} disabled={!selectedPkg}>
