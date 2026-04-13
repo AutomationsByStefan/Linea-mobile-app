@@ -41,10 +41,10 @@ export default function LoginScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Build redirect URI dynamically using app scheme
-  const redirectUri = AuthSession.makeRedirectUri({ scheme: 'com.lineapilates.app', path: 'auth' });
+  // Build redirect URI using Expo auth proxy
+  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
 
-  // Google Auth — implicit flow, no PKCE
+  // Google Auth — implicit flow, no PKCE, using Expo proxy
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: GOOGLE_CLIENT_ID,
@@ -145,7 +145,7 @@ export default function LoginScreen() {
     }
     setGoogleLoading(true);
     setError('');
-    promptAsync();
+    promptAsync({ useProxy: true });
   };
 
   if (step === 'pin') {
