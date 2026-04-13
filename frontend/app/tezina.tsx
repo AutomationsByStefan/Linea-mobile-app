@@ -69,8 +69,12 @@ export default function TezinaScreen() {
     ]);
   };
 
-  // Chart
-  const chartEntries = entries.slice(-10);
+  // Chart — sort by date ascending (oldest first → left, newest → right)
+  const chartEntries = [...entries].sort((a: any, b: any) => {
+    const da = a.date || a.datum || a.created_at || '';
+    const db = b.date || b.datum || b.created_at || '';
+    return da.localeCompare(db);
+  }).slice(-10);
   const weights = chartEntries.map((e: any) => e.weight || e.tezina || 0);
   const minW = Math.min(...weights) - 2;
   const maxW = Math.max(...weights) + 2;
@@ -84,21 +88,21 @@ export default function TezinaScreen() {
 
   const points = chartEntries.map((e: any, i: number) => `${getX(i)},${getY(e.weight || e.tezina || 0)}`).join(' ');
 
-  // Trend — compare latest entry with the one before it
+  // Trend — compare LAST (newest) with SECOND TO LAST entry from sorted chart
   let trendText = '';
   let trendColor = Colors.muted;
   let trendIcon: 'trending-down' | 'trending-up' | 'minus' = 'minus';
   if (weights.length >= 2) {
-    const latest = weights[weights.length - 1];
+    const newest = weights[weights.length - 1];
     const previous = weights[weights.length - 2];
-    const diff = latest - previous;
-    if (diff > 0.1) {
+    const diff = newest - previous;
+    if (diff > 0.05) {
       trendText = `Dobili ste ${diff.toFixed(1)} kg`;
-      trendColor = Colors.danger; // red = weight gain
+      trendColor = Colors.danger;
       trendIcon = 'trending-up';
-    } else if (diff < -0.1) {
+    } else if (diff < -0.05) {
       trendText = `Izgubili ste ${Math.abs(diff).toFixed(1)} kg`;
-      trendColor = Colors.success; // green = weight loss
+      trendColor = Colors.success;
       trendIcon = 'trending-down';
     } else {
       trendText = 'Bez promjene';
