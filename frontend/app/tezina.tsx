@@ -204,8 +204,11 @@ export default function TezinaScreen() {
             let arrow: 'trending-down' | 'trending-up' | 'minus' = 'minus';
             if (i < entries.length - 1) {
               const prev = entries[i + 1]?.weight || entries[i + 1]?.tezina || 0;
-              if (w < prev) arrow = 'trending-down';
-              else if (w > prev) arrow = 'trending-up';
+              // Current entry is newer, prev is older
+              // w > prev = weight increased = trending-up (red)
+              // w < prev = weight decreased = trending-down (green)
+              if (w > prev) arrow = 'trending-up';
+              else if (w < prev) arrow = 'trending-down';
             }
 
             return (
