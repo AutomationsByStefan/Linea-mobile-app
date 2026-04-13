@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  RefreshControl, ActivityIndicator, Modal, Alert, Share, Platform,
+  RefreshControl, ActivityIndicator, Modal, Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -51,7 +51,6 @@ export default function TerminiScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [booking, setBooking] = useState(false);
   const [confirmSlot, setConfirmSlot] = useState<any>(null);
-  const [shareInfo, setShareInfo] = useState<any>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -112,12 +111,6 @@ export default function TerminiScreen() {
       if (res.is_trial) {
         // Trial handled by admin — no special UI for users
       }
-      
-      const free = (slot.slobodna_mjesta || slot.available_spots || 0) - 1;
-      // Only show share if there are still spots left after this booking
-      if (free > 0) {
-        setShareInfo({ training_id: res.training_id, slot });
-      }
 
       await loadData();
     } catch (e: any) {
@@ -125,21 +118,6 @@ export default function TerminiScreen() {
     } finally {
       setBooking(false);
     }
-  };
-
-  const handleShare = async () => {
-    if (!shareInfo) return;
-    try {
-      const res = await scheduleAPI.share(shareInfo.training_id);
-      const shareLink = res.share_link || res.link || 'https://lineapilates.com';
-      await Share.share({
-        message: `Pridruži mi se na Pilates Reformer treningu! 💪\n\n${shareLink}`,
-        title: 'Poziv na trening - Linea Pilates',
-      });
-    } catch (e: any) {
-      console.error(e);
-    }
-    setShareInfo(null);
   };
 
   // Slot card with bed icons
@@ -267,23 +245,6 @@ export default function TerminiScreen() {
                 )}
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Share Modal */}
-      <Modal visible={!!shareInfo} transparent animationType="fade">
-        <View style={st.overlay}>
-          <View style={st.modalCard}>
-            <Feather name="check-circle" size={40} color={Colors.primary} style={{ alignSelf: 'center', marginBottom: 12 }} />
-            <Text style={st.modalTitle}>Termin rezervisan!</Text>
-            <TouchableOpacity testID="share-btn" style={st.shareBtn} onPress={handleShare}>
-              <Feather name="share-2" size={18} color={Colors.white} />
-              <Text style={st.shareBtnText}>Podijeli termin s prijateljicom</Text>
-            </TouchableOpacity>
-            <TouchableOpacity testID="share-skip-btn" onPress={() => setShareInfo(null)}>
-              <Text style={st.skipText}>Preskoči</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -416,7 +377,4 @@ const st = StyleSheet.create({
   modalBtnNoText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.foreground },
   modalBtnYes: { flex: 1, height: 48, borderRadius: 9999, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
   modalBtnYesText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.white },
-  shareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, borderRadius: 9999, height: 48, marginBottom: 12 },
-  shareBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.white },
-  skipText: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted, textAlign: 'center', paddingVertical: 8 },
 });

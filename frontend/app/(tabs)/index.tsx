@@ -139,12 +139,10 @@ export default function HomeScreen() {
               <View style={styles.membershipRow}>
                 <Text style={styles.membershipName}>{activeMembership.package_name || activeMembership.naziv}</Text>
                 <View style={[styles.memberBadge,
-                  ((activeMembership.preostali_termini ?? activeMembership.remaining ?? 0) > 0)
-                    ? styles.memberBadgeActive : styles.memberBadgeExpired]}>
+                  (activeMembership.tip === 'aktivna') ? styles.memberBadgeActive : styles.memberBadgeExpired]}>
                   <Text style={[styles.memberBadgeText,
-                    ((activeMembership.preostali_termini ?? activeMembership.remaining ?? 0) > 0)
-                      ? styles.memberBadgeTextActive : styles.memberBadgeTextExpired]}>
-                    {(activeMembership.preostali_termini ?? activeMembership.remaining ?? 0) > 0 ? 'Aktivna' : 'Istekla'}
+                    (activeMembership.tip === 'aktivna') ? styles.memberBadgeTextActive : styles.memberBadgeTextExpired]}>
+                    {activeMembership.tip === 'aktivna' ? 'Aktivna' : 'Istekla'}
                   </Text>
                 </View>
               </View>

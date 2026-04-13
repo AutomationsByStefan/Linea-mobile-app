@@ -51,7 +51,11 @@ export default function TreninziScreen() {
         trainingAPI.upcoming(),
         trainingAPI.past(),
       ]);
-      if (u.status === 'fulfilled') setUpcoming(Array.isArray(u.value) ? u.value : []);
+      if (u.status === 'fulfilled') {
+        const list = Array.isArray(u.value) ? u.value : [];
+        // Filter out cancelled trainings
+        setUpcoming(list.filter((t: any) => (t.tip || t.status || '').toLowerCase() !== 'otkazani' && (t.tip || t.status || '').toLowerCase() !== 'cancelled'));
+      }
       if (p.status === 'fulfilled') setPast(Array.isArray(p.value) ? p.value : []);
     } catch (e) {
       console.error(e);
