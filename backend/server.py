@@ -308,13 +308,14 @@ async def add_membership(request: Request, user_id: str):
     body = await request.json()
     pkg_id = body.get("package_id")
     custom = body.get("custom")
+    start_date = body.get("start_date", date.today().isoformat())
 
     # Standard package from dropdown
     if pkg_id and pkg_id != "custom":
         # Try to create request and auto-approve on Railway
         try:
             rr = await http_client.post(f"{EXTERNAL_API}/api/admin/package-requests",
-                                        json={"user_id": user_id, "package_id": pkg_id}, cookies=ck)
+                                        json={"user_id": user_id, "package_id": pkg_id, "start_date": start_date}, cookies=ck)
             if rr.status_code == 200:
                 rd = rr.json()
                 rid = rd.get('id', rd.get('request_id'))
@@ -342,7 +343,7 @@ async def add_membership(request: Request, user_id: str):
                 "price": pkg.get('cijena', pkg.get('price', 0)),
                 "sessions": pkg.get('termini', pkg.get('sessions', 0)),
                 "duration": 35, "status": "active",
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": f"{start_date}T00:00:00+00:00",
             }
             await db.custom_memberships.insert_one(doc)
             doc.pop("_id", None)
@@ -358,7 +359,7 @@ async def add_membership(request: Request, user_id: str):
             "sessions": custom.get("sessions", 0),
             "duration": custom.get("duration", 35),
             "status": "active",
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": f"{start_date}T00:00:00+00:00",
         }
         await db.custom_memberships.insert_one(doc)
         doc.pop("_id", None)

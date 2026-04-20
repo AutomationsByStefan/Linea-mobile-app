@@ -636,7 +636,7 @@ function ScheduleSection() {
 
   const generate = async () => {
     try {
-      const res = await api.post('/api/admin/schedule/generate-week', { days: 14 });
+      const res = await api.post('/api/admin/schedule/generate', { days: 14 });
       Alert.alert('Generisano', res.message || 'Termini generisani');
       await load();
     } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
@@ -647,7 +647,7 @@ function ScheduleSection() {
       { text: 'Ne', style: 'cancel' },
       { text: 'Da, obriši', style: 'destructive', onPress: async () => {
         try {
-          await api.delete(`/api/admin/schedule/slots/${id}`);
+          await api.delete(`/api/admin/schedule/${id}`);
           await load();
         } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
       }},
