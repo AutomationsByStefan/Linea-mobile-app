@@ -468,39 +468,45 @@ function FinanceSection() {
       )}
 
       {/* === STATISTIKA TERMINA === */}
-      {subSection === 'slots' && slotAnalytics && (
-        <>
-          <Text style={s.sectionTitle}>Statistika termina</Text>
-          <View style={s.statsRow}>
-            <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.avg_occupancy}%</Text><Text style={s.miniStatLabel}>Prosječna popunjenost (od početka)</Text></View>
-            <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.total_bookings}</Text><Text style={s.miniStatLabel}>Ukupno rezervacija</Text></View>
-            <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.cancellations}</Text><Text style={s.miniStatLabel}>Otkazivanja</Text></View>
-          </View>
-
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Najpopularniji dani (po broju rezervacija)</Text>
-            {(slotAnalytics.day_popularity || []).map((d: any) => (
-              <View key={d.day} style={s.barRow}>
-                <Text style={s.barLabel}>{d.day}</Text>
-                <View style={s.barBg}><View style={[s.barFill, { width: `${Math.max(d.percentage, 2)}%` }]} /></View>
-                <Text style={s.barValue}>{d.bookings}</Text>
-              </View>
-            ))}
-          </View>
-
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Najpopularniji termini (po broju rezervacija)</Text>
-            {(slotAnalytics.time_ranking || []).map((t: any) => (
-              <View key={t.time} style={s.barRow}>
-                <Text style={s.barLabel}>{t.time}</Text>
-                <View style={s.barBg}><View style={[s.barFill, { width: `${Math.max(t.occupancy, 2)}%` }]} /></View>
-                <Text style={s.barValue}>{t.occupied}</Text>
-              </View>
-            ))}
-          </View>
-        </>
-      )}
-
+        {subSection === 'slots' && slotAnalytics && (
+          <>
+            <Text style={s.sectionTitle}>Statistika termina</Text>
+            <View style={s.statsRow}>
+              <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.average_occupancy_percent}%</Text><Text style={s.miniStatLabel}>Prosječna popunjenost (od početka)</Text></View>
+              <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.total_bookings}</Text><Text style={s.miniStatLabel}>Ukupno rezervacija</Text></View>
+              <View style={s.miniStat}><Text style={s.miniStatValue}>{slotAnalytics.cancellations || 0}</Text><Text style={s.miniStatLabel}>Otkazivanja</Text></View>
+            </View>
+            <View style={s.card}>
+              <Text style={s.cardTitle}>Najpopularniji dani (po broju rezervacija)</Text>
+              {(slotAnalytics.popular_days || []).map((d: any) => {
+                const maxCount = Math.max(...(slotAnalytics.popular_days || []).map((x: any) => x.rezervacija || 0), 1);
+                const pct = Math.max((d.rezervacija / maxCount) * 100, 2);
+                return (
+                  <View key={d.dan} style={s.barRow}>
+                    <Text style={s.barLabel}>{d.dan}</Text>
+                    <View style={s.barBg}><View style={[s.barFill, { width: `${pct}%` }]} /></View>
+                    <Text style={s.barValue}>{d.rezervacija}</Text>
+                  </View>
+                );
+              })}
+            </View>
+            <View style={s.card}>
+              <Text style={s.cardTitle}>Najpopularniji termini (po broju rezervacija)</Text>
+              {(slotAnalytics.popular_times || []).map((t: any) => {
+                const maxCount = Math.max(...(slotAnalytics.popular_times || []).map((x: any) => x.rezervacija || 0), 1);
+                const pct = Math.max((t.rezervacija / maxCount) * 100, 2);
+                return (
+                  <View key={t.vrijeme} style={s.barRow}>
+                    <Text style={s.barLabel}>{t.vrijeme}</Text>
+                    <View style={s.barBg}><View style={[s.barFill, { width: `${pct}%` }]} /></View>
+                    <Text style={s.barValue}>{t.rezervacija}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </>
+        )}
+      
       {/* === KLIJENTI STATISTIKA === */}
       {subSection === 'clients' && clientAnalytics && (
         <>
