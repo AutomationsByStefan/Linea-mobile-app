@@ -413,11 +413,12 @@ function FinanceSection() {
             </TouchableOpacity>
           </View>
           {months.map((m: any, i: number) => {
+            if (!m || !m.month) return null;
             const [yr, mn] = m.month.split('-');
             const prevMonth = months[i + 1];
-            const change = prevMonth ? ((m.total - prevMonth.total) / (prevMonth.total || 1) * 100) : 0;
-            const manualTotal = (m.manual || []).reduce((a: number, x: any) => a + (x.amount || 0), 0);
-            const pkgTotal = m.total - manualTotal;
+            const change = prevMonth ? ((m.revenue - prevMonth.revenue) / (prevMonth.revenue || 1) * 100) : 0;
+            const manualTotal = m.manual_revenue || 0;
+            const pkgTotal = m.pkg_revenue || 0;
             const isSelected = selectedMonth?.month === m.month;
 
             return (
@@ -426,7 +427,7 @@ function FinanceSection() {
                 <View style={s.monthHeader}>
                   <View>
                     <Text style={s.monthName}>{MONTH_NAMES[mn] || mn} {yr}</Text>
-                    <Text style={s.monthTotal}>{m.total} KM</Text>
+                    <Text style={s.monthTotal}>{m.revenue} KM</Text>
                   </View>
                   {prevMonth && (
                     <View style={[s.changeBadge, { backgroundColor: change >= 0 ? '#05966920' : '#DC354520' }]}>
@@ -446,26 +447,17 @@ function FinanceSection() {
                       <View style={s.finBox}><Text style={s.finLabel}>Paketi</Text><Text style={s.finValue}>{pkgTotal} KM</Text></View>
                       <View style={s.finBox}><Text style={s.finLabel}>Ručno</Text><Text style={s.finValue}>{manualTotal} KM</Text></View>
                     </View>
-                    <Text style={s.detailLabel}>Paketi</Text>
-                    {Object.entries(m.packages || {}).map(([name, data]: any) => (
-                      <View key={name} style={s.detailRow}>
-                        <Text style={s.userName}>{name}</Text>
-                        <Text style={s.userSub}>{data.count}x prodano</Text>
-                        <Text style={s.finPkgPrice}>{data.total} KM</Text>
-                      </View>
+                    <View style={s.detailRow}>
+                    <Text style={s.userName}>Paketi</Text>
+                    <Text style={s.finPkgPrice}>{m.pkg_revenue || 0} KM</Text>
+                    </View>
                     ))}
-                    {(m.manual || []).length > 0 && (
-                      <>
-                        <Text style={[s.detailLabel, { marginTop: 12 }]}>Ručni prihodi</Text>
-                        {m.manual.map((mi: any) => (
-                          <View key={mi.id} style={s.detailRow}>
-                            <Text style={s.userName}>{mi.description || '-'}</Text>
-                            <Text style={s.userSub}>{mi.category} • {mi.date}</Text>
-                            <Text style={s.finPkgPrice}>{mi.amount} KM</Text>
-                          </View>
-                        ))}
-                      </>
-                    )}
+                    {(m.manual_revenue || 0) > 0 && (
+                    <View style={s.detailRow}>
+                    <Text style={s.userName}>Ručni prihodi</Text>
+                    <Text style={s.finPkgPrice}>{m.manual_revenue} KM</Text>
+                    </View>
+                      )}
                   </View>
                 )}
               </TouchableOpacity>
