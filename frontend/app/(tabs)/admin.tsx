@@ -369,7 +369,7 @@ function FinanceSection() {
     const amt = parseFloat(manualAmt);
     if (isNaN(amt) || amt <= 0) { Alert.alert('Greška', 'Unesite iznos'); return; }
     try {
-      await api.post('/api/admin/finance/manual', { amount: amt, description: manualDesc, category: manualCat });
+      await api.post('/api/admin/manual-income', { iznos: amt, opis: manualDesc, kategorija: manualCat });
       setShowManual(false); setManualAmt(''); setManualDesc('');
       await load();
     } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
