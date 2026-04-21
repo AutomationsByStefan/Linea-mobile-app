@@ -521,12 +521,12 @@ function FinanceSection() {
             <Text style={s.cardTitle}>Novi klijenti</Text>
             <View style={s.compareRow}>
               <View style={s.compareBox}>
-                <Text style={s.compareValue}>{clientAnalytics.new_this_month}</Text>
+                <Text style={s.compareValue}>{clientAnalytics.new_this_month || 0}</Text>
                 <Text style={s.compareLabel}>Ovaj mjesec</Text>
               </View>
               <Feather name="arrow-right" size={16} color={Colors.muted} />
               <View style={s.compareBox}>
-                <Text style={s.compareValue}>{clientAnalytics.new_last_month}</Text>
+                <Text style={s.compareValue}>{clientAnalytics.new_last_month || 0}</Text>
                 <Text style={s.compareLabel}>Prošli mjesec</Text>
               </View>
             </View>
