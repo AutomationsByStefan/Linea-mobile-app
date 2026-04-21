@@ -349,7 +349,7 @@ function FinanceSection() {
   const load = useCallback(async () => {
     try {
       const [f, sa, ca, w] = await Promise.allSettled([
-        api.get('/api/admin/finance'),
+        api.get('/api/admin/financial'),
         api.get('/api/admin/analytics/slots'),
         api.get('/api/admin/analytics/clients'),
         api.get('/api/admin/warnings'),
