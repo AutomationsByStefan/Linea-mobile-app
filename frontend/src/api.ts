@@ -1,8 +1,6 @@
 import { Platform } from 'react-native';
 
-// Always use proxy backend for all API calls
-// Proxy handles cookie forwarding and has additional endpoints (admin stats, warnings, finance, etc.)
-const API_BASE = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://linea-pilates-reformer-production.up.railway.app';
+const API_BASE = 'https://linea-pilates-reformer-production.up.railway.app';
 
 type FetchOptions = RequestInit & { timeout?: number };
 
