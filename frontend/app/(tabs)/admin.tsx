@@ -512,9 +512,9 @@ function FinanceSection() {
         <>
           <Text style={s.sectionTitle}>Klijenti statistika</Text>
           <View style={s.statsRow}>
-            <View style={s.miniStat}><Text style={[s.miniStatValue, { color: '#059669' }]}>{clientAnalytics.active_clients}</Text><Text style={s.miniStatLabel}>Aktivni</Text></View>
-            <View style={s.miniStat}><Text style={[s.miniStatValue, { color: Colors.danger }]}>{clientAnalytics.inactive_clients}</Text><Text style={s.miniStatLabel}>Neaktivni</Text></View>
-            <View style={s.miniStat}><Text style={s.miniStatValue}>{clientAnalytics.total_clients}</Text><Text style={s.miniStatLabel}>Ukupno</Text></View>
+            <View style={s.miniStat}><Text style={[s.miniStatValue, { color: '#059669' }]}>{clientAnalytics.active_count}</Text><Text style={s.miniStatLabel}>Aktivni</Text></View>
+            <View style={s.miniStat}><Text style={[s.miniStatValue, { color: Colors.danger }]}>{clientAnalytics.inactive_count}</Text><Text style={s.miniStatLabel}>Neaktivni</Text></View>
+            <View style={s.miniStat}><Text style={s.miniStatValue}>{(clientAnalytics.active_count || 0) + (clientAnalytics.inactive_count || 0)}</Text><Text style={s.miniStatLabel}>Ukupno</Text></View>
           </View>
 
           <View style={s.card}>
