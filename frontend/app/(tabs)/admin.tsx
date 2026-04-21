@@ -377,7 +377,7 @@ function FinanceSection() {
 
   if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
-  const months = finance?.months || [];
+  const months = finance?.mjesecni_prihod || [];
 
   return (
     <ScrollView style={s.flex} contentContainerStyle={s.content}
