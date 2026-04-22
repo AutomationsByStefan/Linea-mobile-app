@@ -36,7 +36,7 @@
           "image": "./assets/images/adaptive-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#FDFCF8"
+          "backgroundColor": "#F0E9E1"
         }
       ]
     ],
