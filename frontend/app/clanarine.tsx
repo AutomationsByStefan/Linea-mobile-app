@@ -21,8 +21,8 @@ export default function ClanarineScreen() {
     try {
       const res = await membershipsAPI.getAll();
       if (Array.isArray(res)) {
-        const active = res.filter((m: any) => m.active || m.aktivna || m.status === 'active');
-        const past = res.filter((m: any) => !m.active && !m.aktivna && m.status !== 'active');
+        const active = res.filter((m: any) => m.tip === 'aktivna' && (m.preostali_termini || 0) > 0);
+        const past = res.filter((m: any) => m.tip !== 'aktivna' || (m.preostali_termini || 0) === 0);
         setData({ active, past });
       } else {
         setData({ active: res.active || res.aktivne || [], past: res.past || res.prethodne || [] });
@@ -54,7 +54,7 @@ export default function ClanarineScreen() {
           <Text style={styles.cardName}>{name}</Text>
           <View style={[styles.statusBadge, isPast ? styles.statusExpired : styles.statusActive]}>
             <Text style={[styles.statusText, isPast ? styles.statusExpiredText : styles.statusActiveText]}>
-              {isPast ? 'Istekla' : 'Aktivna'}
+              {isPast ? 'Iskorištena' : 'Aktivna'}
             </Text>
           </View>
         </View>
