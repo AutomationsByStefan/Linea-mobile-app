@@ -46,20 +46,20 @@ export default function LoginScreen() {
 
   // Google Auth — implicit flow, no PKCE, using Expo proxy
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: GOOGLE_CLIENT_ID,
-      scopes: ['profile', 'email'],
-      redirectUri,
-      responseType: 'token' as any,
-      usePKCE: false,
-    },
-    discovery
-  );
+  {
+    clientId: GOOGLE_CLIENT_ID,
+    scopes: ['profile', 'email'],
+    redirectUri,
+    responseType: AuthSession.ResponseType.Code,
+    usePKCE: true,
+  },
+  discovery
+);
 
   // Handle Google auth response
   useEffect(() => {
-    if (response?.type === 'success' && response.params?.access_token) {
-      handleGoogleToken(response.params.access_token);
+    if (response?.type === 'success' && response.params?.code) {
+  handleGoogleCode(response.params.code, request?.codeVerifier || '');
     } else if (response?.type === 'error') {
       setError('Google prijava nije uspjela');
       setGoogleLoading(false);
@@ -96,7 +96,38 @@ export default function LoginScreen() {
       setGoogleLoading(false);
     }
   };
-
+  
+  const handleGoogleCode = async (code: string, codeVerifier: string) => {
+  setGoogleLoading(true);
+  setError('');
+  try {
+    const result = await api.post('/api/auth/google/exchange-code', {
+      code,
+      code_verifier: codeVerifier,
+      redirect_uri: redirectUri,
+    });
+    if (result.exists && result.user) {
+      setUser(result.user);
+      await checkAuth();
+      router.replace('/(tabs)');
+    } else if (!result.exists) {
+      router.push({
+        pathname: '/(auth)/register',
+        params: {
+          fromGoogle: 'true',
+          googleEmail: result.email || '',
+          googleName: result.given_name || '',
+          googleSurname: result.family_name || '',
+        },
+      });
+    }
+  } catch (e: any) {
+    setError(e.message || 'Greška pri Google prijavi');
+  } finally {
+    setGoogleLoading(false);
+  }
+};
+  
   const handlePhoneCheck = async () => {
     const num = phone.replace(/\s/g, '');
     if (!num) { setError('Unesite broj telefona'); return; }
@@ -145,7 +176,7 @@ export default function LoginScreen() {
     }
     setGoogleLoading(true);
     setError('');
-    promptAsync({ useProxy: true });
+    promptAsync();
   };
 
   if (step === 'pin') {
