@@ -265,13 +265,14 @@ export default function LoginScreen() {
             <Text style={styles.primaryBtnText}>Nastavi</Text>
           )}
         </TouchableOpacity>
-
+{false && (
         <View style={styles.separator}>
           <View style={styles.separatorLine} />
           <Text style={styles.separatorText}>ili</Text>
           <View style={styles.separatorLine} />
         </View>
-
+)}
+        {false && (
         <TouchableOpacity
           testID="google-signin-btn"
           style={[styles.googleBtn, googleLoading && styles.btnDisabled]}
@@ -285,6 +286,7 @@ export default function LoginScreen() {
             </>
           )}
         </TouchableOpacity>
+  )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
