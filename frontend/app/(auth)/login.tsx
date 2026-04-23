@@ -183,7 +183,7 @@ export default function LoginScreen() {
     return (
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60, flexGrow: 1, justifyContent: 'center' }]}
           keyboardShouldPersistTaps="handled"
         >
           <Image source={{ uri: LOGO_URL }} style={styles.logoLarge} resizeMode="contain" testID="login-logo" />
@@ -230,7 +230,7 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60, flexGrow: 1, justifyContent: 'center' }]}
         keyboardShouldPersistTaps="handled"
       >
         <Image source={{ uri: LOGO_URL }} style={styles.logoLarge} resizeMode="contain" testID="login-logo" />
