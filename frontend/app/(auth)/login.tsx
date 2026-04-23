@@ -42,7 +42,7 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
 
   // Build redirect URI using Expo auth proxy
-  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
+  const redirectUri = 'https://auth.expo.io/@creativetechologies/linea-pilates';
 
   // Google Auth — implicit flow, no PKCE, using Expo proxy
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
