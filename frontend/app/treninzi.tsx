@@ -18,7 +18,7 @@ function getCancelType(datum: string, vrijeme: string, createdAt?: string): 'dir
   const hoursUntil = (trainingDate.getTime() - now.getTime()) / (1000 * 60 * 60);
 
   // More than 24h away — can cancel directly
-  if (hoursUntil > 24) return 'direct';
+  if (hoursUntil > 12) return 'direct';
 
   // Same day booking — check if within 1 hour of booking
   if (createdAt) {
