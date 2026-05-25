@@ -821,6 +821,10 @@ function UsersSection() {
   const [freezeFrom, setFreezeFrom] = useState('');
   const [freezeTo, setFreezeTo] = useState('');
   const [freezeReason, setFreezeReason] = useState('');
+  const [pastTrainingModal, setPastTrainingModal] = useState<any>(null);
+  const [pastTrainingDate, setPastTrainingDate] = useState('');
+  const [pastTrainingTime, setPastTrainingTime] = useState('');
+  const [pastTrainingSaving, setPastTrainingSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -890,6 +894,34 @@ function UsersSection() {
       Alert.alert('Uspješno', 'Korisnik odmrznut');
       await load();
     } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+  };
+
+  const addPastTraining = async () => {
+    if (!pastTrainingModal) return;
+    if (!pastTrainingDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      Alert.alert('Greška', 'Unesite datum u formatu YYYY-MM-DD');
+      return;
+    }
+    if (!pastTrainingTime.match(/^\d{2}:\d{2}$/)) {
+      Alert.alert('Greška', 'Unesite vrijeme u formatu HH:MM');
+      return;
+    }
+    setPastTrainingSaving(true);
+    try {
+      await api.post(`/api/admin/users/${pastTrainingModal.user_id}/add-past-training`, {
+        datum: pastTrainingDate,
+        vrijeme: pastTrainingTime,
+      });
+      Alert.alert('Uspješno', 'Trening uspješno dodan.');
+      setPastTrainingModal(null);
+      setPastTrainingDate('');
+      setPastTrainingTime('');
+      await load();
+    } catch (e: any) {
+      Alert.alert('Greška', e.message || 'Greška pri dodavanju treninga');
+    } finally {
+      setPastTrainingSaving(false);
+    }
   };
 
   const addMembership = async () => {
@@ -979,6 +1011,10 @@ function UsersSection() {
                     </TouchableOpacity>
                     <TouchableOpacity style={s.actionBtnOutline} onPress={() => { setNoteModal(u); setNoteText(u.notes || ''); }}>
                       <Feather name="file-text" size={14} color={Colors.foreground} /><Text style={s.actionBtnOutlineText}>Bilješka</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#6366F1' }]}
+                      onPress={() => { setPastTrainingModal(u); setPastTrainingDate(new Date().toISOString().slice(0, 10)); setPastTrainingTime(''); }}>
+                      <Feather name="plus-square" size={14} color="#FFF" /><Text style={s.actionBtnText}>Prošli trening</Text>
                     </TouchableOpacity>
                   </ScrollView>
                 </View>
@@ -1106,6 +1142,54 @@ function UsersSection() {
               </TouchableOpacity>
               <TouchableOpacity style={s.modalBtnConfirm} onPress={freezeUser}>
                 <Text style={s.modalBtnConfirmText}>Zamrzni</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Past Training Modal */}
+      <Modal visible={!!pastTrainingModal} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Dodaj prošli trening</Text>
+              <TouchableOpacity onPress={() => setPastTrainingModal(null)}>
+                <Feather name="x" size={22} color={Colors.foreground} />
+              </TouchableOpacity>
+            </View>
+            <Text style={s.userSub}>Korisnik: {pastTrainingModal?.name}</Text>
+            <Text style={[s.expandedLabel, { marginTop: 16 }]}>Datum treninga (YYYY-MM-DD)</Text>
+            <TextInput
+              style={s.modalInput}
+              placeholder="2026-05-25"
+              placeholderTextColor={Colors.muted}
+              value={pastTrainingDate}
+              onChangeText={setPastTrainingDate}
+              keyboardType="numbers-and-punctuation"
+            />
+            <Text style={s.expandedLabel}>Vrijeme treninga (HH:MM)</Text>
+            <TextInput
+              style={s.modalInput}
+              placeholder="09:00"
+              placeholderTextColor={Colors.muted}
+              value={pastTrainingTime}
+              onChangeText={setPastTrainingTime}
+              keyboardType="numbers-and-punctuation"
+            />
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalBtnCancel} onPress={() => { setPastTrainingModal(null); setPastTrainingDate(''); setPastTrainingTime(''); }}>
+                <Text style={s.modalBtnCancelText}>Odustani</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.modalBtnConfirm, pastTrainingSaving && { opacity: 0.6 }]}
+                onPress={addPastTraining}
+                disabled={pastTrainingSaving}
+              >
+                {pastTrainingSaving
+                  ? <ActivityIndicator color={Colors.white} size="small" />
+                  : <Text style={s.modalBtnConfirmText}>Sačuvaj</Text>
+                }
               </TouchableOpacity>
             </View>
           </View>

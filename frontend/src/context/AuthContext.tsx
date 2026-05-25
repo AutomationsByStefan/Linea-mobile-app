@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Platform } from 'react-native';
-import { authAPI } from '../api';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import { authAPI, api } from '../api';
 
 // Safe storage wrapper that works on both web and native
 const storage = {
@@ -71,6 +73,23 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+async function registerPushToken() {
+  if (Platform.OS === 'web') return;
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    const finalStatus = existing === 'granted'
+      ? existing
+      : (await Notifications.requestPermissionsAsync()).status;
+    if (finalStatus !== 'granted') return;
+
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? 'f4f6b981-99bd-4157-a6d3-aafe9d83949a';
+    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+    await api.post('/api/user/push-token', { token });
+  } catch {
+    // Permission denied or token registration failed — silent fail
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -103,6 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const me = result.user || result;
     setUser(me);
     await storage.setItem('user', JSON.stringify(me));
+    registerPushToken();
     return result;
   };
 
@@ -111,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const me = result.user || result;
     setUser(me);
     await storage.setItem('user', JSON.stringify(me));
+    registerPushToken();
     return result;
   };
 
