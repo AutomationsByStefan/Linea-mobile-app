@@ -7,7 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from 'expo-router';
 import { Colors, Fonts, Sizes, CardStyle } from '../../src/theme';
-import { packagesAPI } from '../../src/api';
+import { packagesAPI, homeAPI } from '../../src/api';
 
 const BADGES: Record<string, { label: string; color: string }> = {
   'Linea Gold': { label: 'Najpopularniji', color: Colors.primary },
@@ -18,6 +18,7 @@ export default function PaketiScreen() {
   const insets = useSafeAreaInsets();
   const [packages, setPackages] = useState<any[]>([]);
   const [myRequests, setMyRequests] = useState<any[]>([]);
+  const [activeMemberships, setActiveMemberships] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [confirmPkg, setConfirmPkg] = useState<any>(null);
@@ -25,12 +26,14 @@ export default function PaketiScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const [pkgs, reqs] = await Promise.allSettled([
+      const [pkgs, reqs, mems] = await Promise.allSettled([
         packagesAPI.getAll(),
         packagesAPI.myRequests(),
+        homeAPI.activeMemberships(),
       ]);
       if (pkgs.status === 'fulfilled') setPackages(Array.isArray(pkgs.value) ? pkgs.value : []);
       if (reqs.status === 'fulfilled') setMyRequests(Array.isArray(reqs.value) ? reqs.value : []);
+      if (mems.status === 'fulfilled') setActiveMemberships(Array.isArray(mems.value) ? mems.value : []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -53,6 +56,8 @@ export default function PaketiScreen() {
 
   const pendingReq = myRequests.find((r: any) => r.status === 'pending' || r.status === 'na_cekanju');
   const hasPending = !!pendingReq;
+  const hasActiveMembership = activeMemberships.some((m: any) => m.tip === 'aktivna' || m.status === 'aktivna' || m.active === true);
+  const isBlocked = hasActiveMembership || hasPending;
 
   const handleRequest = async () => {
     if (!confirmPkg) return;
@@ -86,6 +91,15 @@ export default function PaketiScreen() {
       >
         <Text style={styles.pageTitle}>Paketi</Text>
         <Text style={styles.pageSubtitle}>Odaberite paket koji vam odgovara</Text>
+
+        {hasActiveMembership && (
+          <View style={styles.activeBanner} testID="active-membership-banner">
+            <Feather name="info" size={18} color={Colors.primary} />
+            <Text style={styles.activeBannerText}>
+              Imate aktivan paket. Novi paket možete izabrati nakon isteka trenutnog.
+            </Text>
+          </View>
+        )}
 
         {hasPending && (
           <View style={styles.pendingBanner} testID="pending-request-banner">
@@ -135,16 +149,24 @@ export default function PaketiScreen() {
                 testID={`select-package-${pkgId}`}
                 style={[
                   badge ? styles.primaryBtn : styles.secondarySelectBtn,
-                  hasPending && styles.btnDisabled,
+                  isBlocked && styles.btnDisabled,
                 ]}
-                onPress={() => !hasPending && setConfirmPkg(pkg)}
-                disabled={hasPending}
+                onPress={() => {
+                  if (isBlocked) {
+                    if (hasActiveMembership) {
+                      Alert.alert('Aktivan paket', 'Već imate aktivan paket. Novi paket možete izabrati kada istekne trenutni ili kada potrošite sve treninge.');
+                    }
+                    return;
+                  }
+                  setConfirmPkg(pkg);
+                }}
+                disabled={isBlocked}
               >
                 <Text style={[
                   badge ? styles.primaryBtnText : styles.secondaryBtnText,
-                  hasPending && styles.disabledText,
+                  isBlocked && styles.disabledText,
                 ]}>
-                  {hasPending ? 'Na čekanju' : 'Odaberi'}
+                  {hasActiveMembership ? 'Aktivan paket' : hasPending ? 'Na čekanju' : 'Odaberi'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -199,6 +221,22 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16 },
   pageTitle: { fontFamily: Fonts.heading, fontSize: Sizes.h2, color: Colors.foreground, marginBottom: 4 },
   pageSubtitle: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted, marginBottom: 20 },
+  activeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    ...CardStyle,
+    backgroundColor: '#FDF6EC',
+    borderColor: Colors.primary,
+    marginBottom: 16,
+  },
+  activeBannerText: {
+    flex: 1,
+    fontFamily: Fonts.bodyMedium,
+    fontSize: Sizes.small,
+    color: Colors.foreground,
+    lineHeight: 20,
+  },
   pendingBanner: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Image, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -40,6 +40,15 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const [forgotVisible, setForgotVisible] = useState(false);
+  const [forgotStep, setForgotStep] = useState<1 | 2>(1);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotCode, setForgotCode] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
 
   // Build redirect URI using Expo auth proxy
   const redirectUri = 'https://auth.expo.io/@creativetechologies/linea-pilates';
@@ -166,6 +175,47 @@ export default function LoginScreen() {
     }
   };
 
+  const openForgotPin = () => {
+    setForgotEmail('');
+    setForgotCode('');
+    setNewPin('');
+    setConfirmPin('');
+    setForgotError('');
+    setForgotStep(1);
+    setForgotVisible(true);
+  };
+
+  const handleSendCode = async () => {
+    if (!forgotEmail.trim()) { setForgotError('Unesite email adresu'); return; }
+    setForgotLoading(true);
+    setForgotError('');
+    try {
+      await api.post('/api/auth/forgot-pin', { email: forgotEmail.trim() });
+      setForgotStep(2);
+    } catch (e: any) {
+      setForgotError(e.message || 'Greška pri slanju koda');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResetPin = async () => {
+    if (forgotCode.length !== 6) { setForgotError('Unesite 6-cifreni kod'); return; }
+    if (newPin.length !== 4) { setForgotError('PIN mora imati 4 cifre'); return; }
+    if (newPin !== confirmPin) { setForgotError('PIN-ovi se ne podudaraju'); return; }
+    setForgotLoading(true);
+    setForgotError('');
+    try {
+      await api.post('/api/auth/reset-pin', { email: forgotEmail.trim(), code: forgotCode, new_pin: newPin });
+      setForgotVisible(false);
+      Alert.alert('Uspjeh', 'PIN uspješno resetovan.');
+    } catch (e: any) {
+      setForgotError(e.message || 'Greška pri resetovanju PIN-a');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   const handleGoogleSignIn = async () => {
     if (!GOOGLE_CLIENT_ID) {
       Alert.alert(
@@ -181,6 +231,7 @@ export default function LoginScreen() {
 
   if (step === 'pin') {
     return (
+      <>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60, flexGrow: 1, justifyContent: 'center' }]}
@@ -222,8 +273,128 @@ export default function LoginScreen() {
           <TouchableOpacity testID="login-back-btn" onPress={() => { setStep('phone'); setPin(''); setError(''); }}>
             <Text style={styles.linkText}>Nazad</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity onPress={openForgotPin}>
+            <Text style={styles.forgotText}>Zaboravili ste PIN?</Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={forgotVisible} animationType="slide" transparent={false} onRequestClose={() => setForgotVisible(false)}>
+        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ScrollView
+            contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60, flexGrow: 1, justifyContent: 'center' }]}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Image source={{ uri: LOGO_URL }} style={styles.logoLarge} resizeMode="contain" />
+
+            {forgotStep === 1 ? (
+              <>
+                <Text style={styles.title}>Resetuj PIN</Text>
+                <Text style={styles.subtitle}>Unesite email adresu povezanu sa vašim nalogom</Text>
+
+                <View style={styles.inputContainer}>
+                  <Feather name="mail" size={18} color={Colors.muted} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={forgotEmail}
+                    onChangeText={setForgotEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    placeholder="vas@email.com"
+                    placeholderTextColor={Colors.muted}
+                  />
+                </View>
+
+                {forgotError ? <Text style={styles.error}>{forgotError}</Text> : null}
+
+                <TouchableOpacity
+                  style={[styles.primaryBtn, forgotLoading && styles.btnDisabled]}
+                  onPress={handleSendCode}
+                  disabled={forgotLoading}
+                >
+                  {forgotLoading ? <ActivityIndicator color={Colors.white} /> : (
+                    <Text style={styles.primaryBtnText}>Pošalji kod</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.title}>Unesite kod</Text>
+                <Text style={styles.subtitle}>Kod je poslan na vašu email adresu.</Text>
+
+                <View style={styles.inputContainer}>
+                  <Feather name="hash" size={18} color={Colors.muted} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={forgotCode}
+                    onChangeText={(t) => setForgotCode(t.replace(/[^0-9]/g, '').slice(0, 6))}
+                    keyboardType="numeric"
+                    placeholder="6-cifreni kod"
+                    placeholderTextColor={Colors.muted}
+                    maxLength={6}
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Feather name="lock" size={18} color={Colors.muted} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={newPin}
+                    onChangeText={(t) => setNewPin(t.replace(/[^0-9]/g, '').slice(0, 4))}
+                    keyboardType="numeric"
+                    secureTextEntry
+                    placeholder="Novi 4-cifreni PIN"
+                    placeholderTextColor={Colors.muted}
+                    maxLength={4}
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Feather name="lock" size={18} color={Colors.muted} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={confirmPin}
+                    onChangeText={(t) => setConfirmPin(t.replace(/[^0-9]/g, '').slice(0, 4))}
+                    keyboardType="numeric"
+                    secureTextEntry
+                    placeholder="Potvrdi novi PIN"
+                    placeholderTextColor={Colors.muted}
+                    maxLength={4}
+                  />
+                </View>
+
+                {forgotError ? <Text style={styles.error}>{forgotError}</Text> : null}
+
+                <TouchableOpacity
+                  style={[styles.primaryBtn, forgotLoading && styles.btnDisabled]}
+                  onPress={handleResetPin}
+                  disabled={forgotLoading}
+                >
+                  {forgotLoading ? <ActivityIndicator color={Colors.white} /> : (
+                    <Text style={styles.primaryBtnText}>Resetuj PIN</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity onPress={() => {
+              if (forgotStep === 2) {
+                setForgotStep(1);
+                setForgotCode('');
+                setNewPin('');
+                setConfirmPin('');
+                setForgotError('');
+              } else {
+                setForgotVisible(false);
+              }
+            }}>
+              <Text style={styles.linkText}>Nazad</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+      </>
     );
   }
 
@@ -399,5 +570,20 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     textAlign: 'center',
     paddingVertical: 8,
+  },
+  forgotText: {
+    fontFamily: Fonts.body,
+    fontSize: Sizes.small,
+    color: Colors.muted,
+    textAlign: 'center',
+    paddingVertical: 8,
+    textDecorationLine: 'underline',
+  },
+  textInput: {
+    flex: 1,
+    fontFamily: Fonts.body,
+    fontSize: Sizes.body,
+    color: Colors.foreground,
+    paddingVertical: 14,
   },
 });
