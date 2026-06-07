@@ -6,7 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Sizes, CardStyle, formatDateBosnian } from '../src/theme';
+import { Colors, Fonts, Sizes, CardStyle, formatDateWithDay } from '../src/theme';
 import { trainingAPI, api } from '../src/api';
 
 function getCancelType(datum: string, vrijeme: string, createdAt?: string): 'direct' | 'hourly' | 'admin' {
@@ -17,7 +17,7 @@ function getCancelType(datum: string, vrijeme: string, createdAt?: string): 'dir
 
   const hoursUntil = (trainingDate.getTime() - now.getTime()) / (1000 * 60 * 60);
 
-  // More than 24h away — can cancel directly
+  // More than 12h away — can cancel directly
   if (hoursUntil > 12) return 'direct';
 
   // Same day booking — check if within 1 hour of booking
@@ -121,7 +121,7 @@ export default function TreninziScreen() {
       // Send message to admin
       Alert.alert(
         'Otkazivanje nije moguće',
-        'Trening je zakazan za manje od 24 sata. Zahtjev za otkazivanje će biti poslan administratoru studija.',
+        'Trening je zakazan za manje od 12 sati. Zahtjev za otkazivanje će biti poslan administratoru studija.',
         [
           { text: 'Odustani', style: 'cancel' },
           { text: 'Pošalji zahtjev', onPress: async () => {
@@ -202,7 +202,7 @@ export default function TreninziScreen() {
                     <Feather name={isPast ? 'check' : 'calendar'} size={22} color={isPast ? Colors.muted : Colors.white} />
                   </View>
                   <View style={styles.trainingInfo}>
-                    <Text style={styles.trainingDate}>{datum ? formatDateBosnian(datum) : ''}</Text>
+                    <Text style={styles.trainingDate}>{datum ? formatDateWithDay(datum) : ''}</Text>
                     <View style={styles.timeRow}>
                       <Feather name="clock" size={14} color={Colors.muted} />
                       <Text style={styles.trainingTime}>{vrijeme}</Text>

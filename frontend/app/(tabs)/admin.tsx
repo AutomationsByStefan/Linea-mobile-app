@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  RefreshControl, ActivityIndicator, TextInput, Modal, Alert, FlatList,
+  RefreshControl, ActivityIndicator, TextInput, Modal, Alert, FlatList, Switch,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -451,7 +451,6 @@ function FinanceSection() {
                     <Text style={s.userName}>Paketi</Text>
                     <Text style={s.finPkgPrice}>{m.pkg_revenue || 0} KM</Text>
                     </View>
-                    ))}
                     {(m.manual_revenue || 0) > 0 && (
                     <View style={s.detailRow}>
                     <Text style={s.userName}>Ručni prihodi</Text>
@@ -618,13 +617,18 @@ function FinanceSection() {
 // ============= SCHEDULE =============
 function ScheduleSection() {
   const [slots, setSlots] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const data = await api.get('/api/admin/schedule');
-      setSlots(Array.isArray(data) ? data : []);
+      const [sched, bk] = await Promise.allSettled([
+        api.get('/api/admin/schedule'),
+        api.get('/api/admin/bookings'),
+      ]);
+      if (sched.status === 'fulfilled') setSlots(Array.isArray(sched.value) ? sched.value : []);
+      if (bk.status === 'fulfilled') setBookings(Array.isArray(bk.value) ? bk.value : []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, []);
@@ -634,7 +638,7 @@ function ScheduleSection() {
 
   const generate = async () => {
     try {
-      const res = await api.post('/api/admin/schedule/generate-week', { days: 14 });
+      const res = await api.post('/api/admin/schedule/generate-week', { days: 30 });
       Alert.alert('Generisano', res.message || 'Termini generisani');
       await load();
     } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
@@ -664,11 +668,44 @@ function ScheduleSection() {
     ]);
   };
 
+  // Admin cancels a user's training (bypasses the 12h window; backend refunds the session)
+  const cancelTraining = (trainingId: string, userName: string) => {
+    if (!trainingId) { Alert.alert('Greška', 'Trening nije moguće identifikovati'); return; }
+    Alert.alert('Otkaži trening', `Da li ste sigurni da želite otkazati trening za ${userName}?`, [
+      { text: 'Ne', style: 'cancel' },
+      { text: 'Da, otkaži', style: 'destructive', onPress: async () => {
+        try {
+          await api.post(`/api/admin/trainings/${trainingId}/cancel`, { reason: 'admin' });
+          Alert.alert('Uspješno', 'Trening otkazan.');
+          await load();
+        } catch (e: any) { Alert.alert('Greška', e.message || 'Greška pri otkazivanju'); }
+      }},
+    ]);
+  };
+
   if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   const grouped: Record<string, any[]> = {};
   slots.forEach(sl => { const d = sl.datum; if (!grouped[d]) grouped[d] = []; grouped[d].push(sl); });
-  const dates = Object.keys(grouped).sort();
+
+  // Task 5 — show visible range of 30 days ahead (display/filter only, slots untouched)
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const maxDate = new Date(todayStart.getTime() + 30 * 86400000);
+  const dates = Object.keys(grouped).filter(d => {
+    const dt = new Date(d + 'T00:00:00');
+    return !isNaN(dt.getTime()) && dt >= todayStart && dt <= maxDate;
+  }).sort();
+
+  // Task 6 — users who booked a given slot (matched by date + time), with training id for cancellation
+  const bookedFor = (datum: string, vrijeme: string): { id: string; name: string }[] =>
+    bookings.filter((b: any) => {
+      const st = (b.status || b.tip || '').toString().toLowerCase();
+      return (b.datum || b.date) === datum && (b.vrijeme || b.time) === vrijeme
+        && !st.includes('otkazan') && st !== 'cancelled';
+    }).map((b: any) => ({
+      id: b.id || b._id || b.training_id,
+      name: b.korisnik_ime || b.user_name || b.korisnik?.name || b.name || 'Korisnik',
+    }));
 
   return (
     <ScrollView style={s.flex} contentContainerStyle={s.content}
@@ -691,7 +728,11 @@ function ScheduleSection() {
             </TouchableOpacity>
           </View>
           <View style={s.slotGrid}>
-            {grouped[date].sort((a: any, b: any) => a.vrijeme.localeCompare(b.vrijeme)).map((sl: any) => (
+            {grouped[date].sort((a: any, b: any) => a.vrijeme.localeCompare(b.vrijeme)).map((sl: any) => {
+              const booked = bookedFor(sl.datum, sl.vrijeme);
+              const slotTime = new Date(`${sl.datum}T${sl.vrijeme || '23:59'}`);
+              const isFutureSlot = !isNaN(slotTime.getTime()) && slotTime > new Date();
+              return (
               <View key={sl.id} style={s.slotCard} testID={`admin-slot-${sl.id}`}>
                 <View style={s.slotHeader}>
                   <Text style={s.slotTime}>{sl.vrijeme}</Text>
@@ -703,8 +744,25 @@ function ScheduleSection() {
                 <Text style={[s.slotSpots, (sl.slobodna_mjesta || 0) < (sl.ukupno_mjesta || 3) && { color: Colors.danger }]}>
                   {sl.slobodna_mjesta || 0}/{sl.ukupno_mjesta || 3} mjesta
                 </Text>
+                {booked.length > 0 && (
+                  <View style={s.slotBookedList}>
+                    {booked.map((b, i) => (
+                      <View key={b.id || i} style={s.slotBookedRow}>
+                        <Text style={s.slotBookedName} numberOfLines={1}>• {b.name}</Text>
+                        {isFutureSlot && (
+                          <TouchableOpacity
+                            testID={`cancel-training-${b.id}`}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            onPress={() => cancelTraining(b.id, b.name)}>
+                            <Feather name="x-circle" size={15} color={Colors.danger} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
-            ))}
+            );})}
           </View>
         </View>
       ))}
@@ -817,6 +875,21 @@ function UsersSection() {
   const [selectedPkg, setSelectedPkg] = useState('');
   const [packages, setPackages] = useState<any[]>([]);
   const [memberStartDate, setMemberStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [memberSaving, setMemberSaving] = useState(false);
+  // Admin book training (Task 7)
+  const [bookModal, setBookModal] = useState<any>(null);
+  const [bookSlots, setBookSlots] = useState<any[]>([]);
+  const [bookSlotsLoading, setBookSlotsLoading] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<any>(null);
+  const [bookSaving, setBookSaving] = useState(false);
+  // Manual notification (Task 9)
+  const [notifModal, setNotifModal] = useState(false);
+  const [notifRecipients, setNotifRecipients] = useState<'all' | 'active' | 'individual'>('all');
+  const [notifUser, setNotifUser] = useState<any>(null);
+  const [notifSearch, setNotifSearch] = useState('');
+  const [notifTitle, setNotifTitle] = useState('');
+  const [notifBody, setNotifBody] = useState('');
+  const [notifSending, setNotifSending] = useState(false);
   const [freezeModal, setFreezeModal] = useState<any>(null);
   const [freezeFrom, setFreezeFrom] = useState('');
   const [freezeTo, setFreezeTo] = useState('');
@@ -825,6 +898,7 @@ function UsersSection() {
   const [pastTrainingDate, setPastTrainingDate] = useState('');
   const [pastTrainingTime, setPastTrainingTime] = useState('');
   const [pastTrainingSaving, setPastTrainingSaving] = useState(false);
+  const [pastTrainingHistorical, setPastTrainingHistorical] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -855,23 +929,12 @@ function UsersSection() {
 
   const loadHistory = async (u: any) => {
     setHistoryModal(u);
+    setHistoryData(null);
     try {
-      const data = await api.get(`/api/admin/users/${u.user_id}/history`);
-      setHistoryData(data);
-    } catch (e) { setHistoryData({ memberships: [], requests: [] }); }
-  };
-
-  const deductSession = async (userId: string) => {
-    Alert.alert('Oduzmi termin', 'Da li ste sigurni da želite oduzeti termin?', [
-      { text: 'Ne', style: 'cancel' },
-      { text: 'Da, oduzmi', style: 'destructive', onPress: async () => {
-        try {
-          await api.post(`/api/admin/users/${userId}/deduct-session`, {});
-          Alert.alert('Uspješno', 'Termin je oduzet');
-          await load();
-        } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
-      }},
-    ]);
+      const data = await api.get(`/api/admin/users/${u.user_id}/membership-history`);
+      const list = Array.isArray(data) ? data : (data?.memberships || data?.history || []);
+      setHistoryData({ memberships: Array.isArray(list) ? list : [] });
+    } catch (e) { setHistoryData({ memberships: [] }); }
   };
 
   const freezeUser = async () => {
@@ -911,11 +974,13 @@ function UsersSection() {
       await api.post(`/api/admin/users/${pastTrainingModal.user_id}/add-past-training`, {
         datum: pastTrainingDate,
         vrijeme: pastTrainingTime,
+        historical: pastTrainingHistorical,
       });
       Alert.alert('Uspješno', 'Trening uspješno dodan.');
       setPastTrainingModal(null);
       setPastTrainingDate('');
       setPastTrainingTime('');
+      setPastTrainingHistorical(false);
       await load();
     } catch (e: any) {
       Alert.alert('Greška', e.message || 'Greška pri dodavanju treninga');
@@ -926,15 +991,82 @@ function UsersSection() {
 
   const addMembership = async () => {
     if (!memberModal || !selectedPkg) return;
+    if (!memberStartDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      Alert.alert('Greška', 'Unesite datum u formatu YYYY-MM-DD');
+      return;
+    }
+    setMemberSaving(true);
     try {
-      const result = await api.post(`/api/admin/users/${memberModal.user_id}/add-membership`, {
+      await api.post(`/api/admin/users/${memberModal.user_id}/add-membership`, {
         package_id: selectedPkg,
         start_date: memberStartDate,
       });
-      Alert.alert('Uspješno', result.message || 'Članarina dodana');
+      Alert.alert('Uspješno', 'Članarina uspješno dodana.');
       setMemberModal(null); setSelectedPkg(''); setMemberStartDate(new Date().toISOString().slice(0, 10));
       await load();
     } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+    finally { setMemberSaving(false); }
+  };
+
+  // Task 7/8 — Admin books a training for the user (no session check; backend overrides)
+  const openBookModal = async (u: any) => {
+    setBookModal(u); setSelectedSlot(null); setBookSlots([]); setBookSlotsLoading(true);
+    try {
+      const data = await api.get('/api/admin/schedule');
+      const all = Array.isArray(data) ? data : [];
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const maxDate = new Date(today.getTime() + 30 * 86400000);
+      const available = all.filter((sl: any) => {
+        const d = new Date((sl.datum || sl.date) + 'T00:00:00');
+        if (isNaN(d.getTime()) || d < today || d > maxDate) return false;
+        return (sl.slobodna_mjesta ?? sl.available_spots ?? 0) > 0;
+      }).sort((a: any, b: any) => {
+        const ka = `${a.datum || a.date} ${a.vrijeme || a.time}`;
+        const kb = `${b.datum || b.date} ${b.vrijeme || b.time}`;
+        return ka.localeCompare(kb);
+      });
+      setBookSlots(available);
+    } catch (e) { setBookSlots([]); }
+    finally { setBookSlotsLoading(false); }
+  };
+
+  const bookTraining = async () => {
+    if (!bookModal || !selectedSlot) return;
+    setBookSaving(true);
+    try {
+      await api.post(`/api/admin/users/${bookModal.user_id}/book-training`, {
+        slot_id: selectedSlot.id || selectedSlot._id || selectedSlot.slot_id,
+      });
+      Alert.alert('Uspješno', 'Trening uspješno zakazan.');
+      setBookModal(null); setSelectedSlot(null); setBookSlots([]);
+      await load();
+    } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+    finally { setBookSaving(false); }
+  };
+
+  // Task 9 — Send a manual push notification
+  const sendNotification = async () => {
+    if (!notifTitle.trim() || !notifBody.trim()) {
+      Alert.alert('Greška', 'Unesite naslov i poruku');
+      return;
+    }
+    if (notifRecipients === 'individual' && !notifUser) {
+      Alert.alert('Greška', 'Izaberite korisnika');
+      return;
+    }
+    setNotifSending(true);
+    try {
+      await api.post('/api/admin/send-notification', {
+        recipients: notifRecipients,
+        user_id: notifRecipients === 'individual' ? notifUser.user_id : undefined,
+        title: notifTitle.trim(),
+        body: notifBody.trim(),
+      });
+      Alert.alert('Uspješno', 'Obavještenje uspješno poslano.');
+      setNotifModal(false); setNotifTitle(''); setNotifBody('');
+      setNotifRecipients('all'); setNotifUser(null); setNotifSearch('');
+    } catch (e: any) { Alert.alert('Greška', e.message || 'Greška pri slanju obavještenja'); }
+    finally { setNotifSending(false); }
   };
 
   if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
@@ -943,7 +1075,13 @@ function UsersSection() {
     <View style={s.flex}>
       <ScrollView style={s.flex} contentContainerStyle={s.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}>
-        <Text style={s.sectionTitle}>Korisnici</Text>
+        <View style={s.cardHeader}>
+          <Text style={s.sectionTitle}>Korisnici</Text>
+          <TouchableOpacity style={s.goldBtn} onPress={() => setNotifModal(true)}>
+            <Feather name="bell" size={14} color={Colors.white} />
+            <Text style={s.goldBtnText}>Pošalji obavještenje</Text>
+          </TouchableOpacity>
+        </View>
         <View style={s.searchBox}>
           <Feather name="search" size={18} color={Colors.muted} />
           <TextInput style={s.searchInput} placeholder="Pretraži korisnike..." placeholderTextColor={Colors.muted}
@@ -990,9 +1128,6 @@ function UsersSection() {
                   ) : null}
 
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.actionRow}>
-                    <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#F97316' }]} onPress={() => deductSession(u.user_id)}>
-                      <Feather name="minus-circle" size={14} color="#FFF" /><Text style={s.actionBtnText}>Oduzmi termin</Text>
-                    </TouchableOpacity>
                     {(u.is_frozen || u.status === 'frozen') ? (
                       <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#059669' }]} onPress={() => unfreezeUser(u.user_id)}>
                         <Feather name="sun" size={14} color="#FFF" /><Text style={s.actionBtnText}>Odmrzni</Text>
@@ -1006,8 +1141,11 @@ function UsersSection() {
                     <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#10B981' }]} onPress={() => setMemberModal(u)}>
                       <Feather name="plus-circle" size={14} color="#FFF" /><Text style={s.actionBtnText}>Dodaj članarinu</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity style={[s.actionBtn, { backgroundColor: Colors.primary }]} onPress={() => openBookModal(u)}>
+                      <Feather name="calendar" size={14} color="#FFF" /><Text style={s.actionBtnText}>Zakaži trening</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity style={s.actionBtnOutline} onPress={() => loadHistory(u)}>
-                      <Feather name="clock" size={14} color={Colors.foreground} /><Text style={s.actionBtnOutlineText}>Historija</Text>
+                      <Feather name="clock" size={14} color={Colors.foreground} /><Text style={s.actionBtnOutlineText}>Istorija</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={s.actionBtnOutline} onPress={() => { setNoteModal(u); setNoteText(u.notes || ''); }}>
                       <Feather name="file-text" size={14} color={Colors.foreground} /><Text style={s.actionBtnOutlineText}>Bilješka</Text>
@@ -1047,40 +1185,62 @@ function UsersSection() {
         </View>
       </Modal>
 
-      {/* History Modal */}
+      {/* Istorija (Membership history) Modal */}
       <Modal visible={!!historyModal} transparent animationType="fade">
         <View style={s.modalOverlay}>
           <View style={s.modalContent}>
             <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Historija - {historyModal?.name}</Text>
+              <Text style={s.modalTitle}>Istorija - {historyModal?.name}</Text>
               <TouchableOpacity onPress={() => { setHistoryModal(null); setHistoryData(null); }}>
                 <Feather name="x" size={22} color={Colors.foreground} />
               </TouchableOpacity>
             </View>
             {historyData ? (
-              <ScrollView style={{ maxHeight: 400 }}>
-                <Text style={s.histSection}>ČLANARINE</Text>
-                {(historyData.memberships || []).map((m: any, i: number) => (
-                  <View key={i} style={s.histRow}>
-                    <Text style={s.userName}>{m.name}</Text>
-                    <Text style={s.userSub}>Cijena: {m.price} KM | Termini: {m.sessions}</Text>
-                  </View>
-                ))}
-                <Text style={s.histSection}>ZAHTJEVI</Text>
-                {(historyData.requests || []).map((r: any, i: number) => (
-                  <View key={i} style={s.histRow}>
-                    <View style={s.histReqRow}>
-                      <Text style={s.userName}>{r.package_name} - {r.package_price} KM</Text>
-                      <View style={[s.statusBadge, { backgroundColor: r.status === 'approved' ? '#05966920' : '#D9770620' }]}>
-                        <Text style={[s.statusText, { color: r.status === 'approved' ? '#059669' : '#D97706' }]}>
-                          {r.status === 'approved' ? 'Odobreno' : r.status}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={s.userSub}>{formatDD(r.created_at)}</Text>
-                  </View>
-                ))}
-              </ScrollView>
+              (() => {
+                const memberships = [...(historyData.memberships || [])].sort((a: any, b: any) => {
+                  const da = a.start_date || a.datum_pocetka || a.datum_aktivacije || a.created_at || '';
+                  const db = b.start_date || b.datum_pocetka || b.datum_aktivacije || b.created_at || '';
+                  return String(db).localeCompare(String(da));
+                });
+                const today = new Date().toISOString().slice(0, 10);
+                return (
+                  <ScrollView style={{ maxHeight: 440 }}>
+                    {memberships.length === 0 ? (
+                      <Text style={s.emptyText}>Nema članarina</Text>
+                    ) : memberships.map((m: any, i: number) => {
+                      const pkgName = m.package_name || m.naziv_paketa || m.naziv || m.name || m.paket || 'Članarina';
+                      const startDate = m.start_date || m.datum_pocetka || m.datum_aktivacije || m.created_at;
+                      const endDate = m.end_date || m.datum_isteka || m.expires_at;
+                      const total = m.sessions ?? m.ukupni_termini ?? m.total_sessions ?? m.termini ?? 0;
+                      const remaining = m.preostali_termini ?? m.remaining_sessions;
+                      const used = m.sessions_used ?? m.iskorišteni_termini ?? m.iskoristeni_termini ??
+                        (remaining != null ? Math.max(total - remaining, 0) : undefined);
+                      const rawStatus = (m.status || '').toString().toLowerCase();
+                      const isActive = m.is_active ?? m.aktivna ??
+                        (rawStatus ? (rawStatus.includes('aktiv') || rawStatus === 'active')
+                          : (endDate ? String(endDate) >= today : false));
+                      return (
+                        <View key={i} style={s.histRow}>
+                          <View style={s.histReqRow}>
+                            <Text style={s.userName}>{pkgName}</Text>
+                            <View style={[s.statusBadge, { backgroundColor: isActive ? '#05966920' : '#88888820' }]}>
+                              <Text style={[s.statusText, { color: isActive ? '#059669' : Colors.muted }]}>
+                                {isActive ? 'Aktivna' : 'Istekla'}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={s.userSub}>
+                            {formatDD(startDate)}{endDate ? ` — ${formatDD(endDate)}` : ''}
+                          </Text>
+                          <Text style={[s.userSub, { color: Colors.primary, fontFamily: Fonts.bodySemiBold }]}>
+                            Termini: {used != null ? used : '?'}/{total}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+                );
+              })()
             ) : <ActivityIndicator color={Colors.primary} />}
           </View>
         </View>
@@ -1097,21 +1257,26 @@ function UsersSection() {
               value={memberStartDate} onChangeText={setMemberStartDate} />
             <Text style={s.expandedLabel}>Odaberi paket</Text>
             <View style={s.pkgList}>
-              {packages.map((p: any) => (
-                <TouchableOpacity key={p.id} style={[s.pkgOption, selectedPkg === p.id && s.pkgOptionActive]}
-                  onPress={() => setSelectedPkg(p.id)}>
-                  <Text style={[s.pkgOptionText, selectedPkg === p.id && s.pkgOptionTextActive]}>
-                    {p.naziv || p.name} - {p.cijena || p.price} KM ({p.termini || p.sessions} termina)
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {packages.map((p: any) => {
+                const pid = p.id || p._id || p.package_id;
+                return (
+                  <TouchableOpacity key={pid} style={[s.pkgOption, selectedPkg === pid && s.pkgOptionActive]}
+                    onPress={() => setSelectedPkg(pid)}>
+                    <Text style={[s.pkgOptionText, selectedPkg === pid && s.pkgOptionTextActive]}>
+                      {p.naziv || p.name} - {p.cijena || p.price} KM ({p.termini || p.sessions} termina)
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
             <View style={s.modalBtns}>
               <TouchableOpacity style={s.modalBtnCancel} onPress={() => { setMemberModal(null); setSelectedPkg(''); setMemberStartDate(new Date().toISOString().slice(0, 10)); }}>
                 <Text style={s.modalBtnCancelText}>Odustani</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[s.modalBtnConfirm, !selectedPkg && { opacity: 0.5 }]} onPress={addMembership} disabled={!selectedPkg}>
-                <Text style={s.modalBtnConfirmText}>Kreiraj članarinu</Text>
+              <TouchableOpacity style={[s.modalBtnConfirm, (!selectedPkg || memberSaving) && { opacity: 0.5 }]} onPress={addMembership} disabled={!selectedPkg || memberSaving}>
+                {memberSaving
+                  ? <ActivityIndicator color={Colors.white} size="small" />
+                  : <Text style={s.modalBtnConfirmText}>Kreiraj članarinu</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -1177,8 +1342,18 @@ function UsersSection() {
               onChangeText={setPastTrainingTime}
               keyboardType="numbers-and-punctuation"
             />
+            <View style={s.toggleRow}>
+              <Text style={s.toggleLabel}>Istorijski trening (ne oduzima od paketa)</Text>
+              <Switch
+                value={pastTrainingHistorical}
+                onValueChange={setPastTrainingHistorical}
+                trackColor={{ false: Colors.inputBorder, true: Colors.primary }}
+                thumbColor={Colors.white}
+                ios_backgroundColor={Colors.inputBorder}
+              />
+            </View>
             <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalBtnCancel} onPress={() => { setPastTrainingModal(null); setPastTrainingDate(''); setPastTrainingTime(''); }}>
+              <TouchableOpacity style={s.modalBtnCancel} onPress={() => { setPastTrainingModal(null); setPastTrainingDate(''); setPastTrainingTime(''); setPastTrainingHistorical(false); }}>
                 <Text style={s.modalBtnCancelText}>Odustani</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1190,6 +1365,128 @@ function UsersSection() {
                   ? <ActivityIndicator color={Colors.white} size="small" />
                   : <Text style={s.modalBtnConfirmText}>Sačuvaj</Text>
                 }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Book Training Modal (Task 7) */}
+      <Modal visible={!!bookModal} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Zakaži trening</Text>
+              <TouchableOpacity onPress={() => { setBookModal(null); setSelectedSlot(null); setBookSlots([]); }}>
+                <Feather name="x" size={22} color={Colors.foreground} />
+              </TouchableOpacity>
+            </View>
+            <Text style={s.userSub}>Korisnik: {bookModal?.name}</Text>
+            {bookSlotsLoading ? (
+              <ActivityIndicator color={Colors.primary} style={{ marginVertical: 24 }} />
+            ) : bookSlots.length === 0 ? (
+              <Text style={s.emptyText}>Nema dostupnih termina u narednih 30 dana</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 360, marginVertical: 12 }}>
+                {bookSlots.map((sl: any) => {
+                  const sid = sl.id || sl._id || sl.slot_id;
+                  const selId = selectedSlot && (selectedSlot.id || selectedSlot._id || selectedSlot.slot_id);
+                  const isSel = sid === selId;
+                  const free = sl.slobodna_mjesta ?? sl.available_spots ?? 0;
+                  const total = sl.ukupno_mjesta ?? sl.total_spots ?? 3;
+                  return (
+                    <TouchableOpacity key={sid} style={[s.pkgOption, isSel && s.pkgOptionActive]} onPress={() => setSelectedSlot(sl)}>
+                      <Text style={[s.pkgOptionText, isSel && s.pkgOptionTextActive]}>
+                        {formatDD(sl.datum || sl.date)} • {sl.vrijeme || sl.time} — {sl.instruktor || sl.instructor || ''} ({free}/{total} slobodno)
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalBtnCancel} onPress={() => { setBookModal(null); setSelectedSlot(null); setBookSlots([]); }}>
+                <Text style={s.modalBtnCancelText}>Odustani</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.modalBtnConfirm, (!selectedSlot || bookSaving) && { opacity: 0.5 }]} onPress={bookTraining} disabled={!selectedSlot || bookSaving}>
+                {bookSaving
+                  ? <ActivityIndicator color={Colors.white} size="small" />
+                  : <Text style={s.modalBtnConfirmText}>Zakaži</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Send Notification Modal (Task 9) */}
+      <Modal visible={notifModal} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Pošalji obavještenje</Text>
+              <TouchableOpacity onPress={() => setNotifModal(false)}>
+                <Feather name="x" size={22} color={Colors.foreground} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={s.expandedLabel}>Primaoci</Text>
+            <View style={s.catRow}>
+              {([
+                { key: 'all', label: 'Svima' },
+                { key: 'active', label: 'Aktivnim članicama' },
+                { key: 'individual', label: 'Izaberi korisnika' },
+              ] as const).map(o => (
+                <TouchableOpacity key={o.key} style={[s.catBtn, notifRecipients === o.key && s.catBtnActive]}
+                  onPress={() => setNotifRecipients(o.key)}>
+                  <Text style={[s.catBtnText, notifRecipients === o.key && s.catBtnTextActive]}>{o.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {notifRecipients === 'individual' && (
+              <View style={{ marginBottom: 12 }}>
+                {notifUser ? (
+                  <TouchableOpacity style={[s.pkgOption, s.pkgOptionActive]} onPress={() => setNotifUser(null)}>
+                    <Text style={s.pkgOptionTextActive}>{notifUser.name} ({notifUser.phone}) — promijeni</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    <View style={s.searchBox}>
+                      <Feather name="search" size={18} color={Colors.muted} />
+                      <TextInput style={s.searchInput} placeholder="Pretraži korisnike..." placeholderTextColor={Colors.muted}
+                        value={notifSearch} onChangeText={setNotifSearch} />
+                    </View>
+                    <ScrollView style={{ maxHeight: 160 }} keyboardShouldPersistTaps="handled">
+                      {users.filter(u => {
+                        if (!notifSearch) return true;
+                        const q = notifSearch.toLowerCase();
+                        return (u.name || '').toLowerCase().includes(q) || (u.phone || '').includes(q) || (u.email || '').toLowerCase().includes(q);
+                      }).slice(0, 30).map((u: any) => (
+                        <TouchableOpacity key={u.user_id} style={s.pkgOption} onPress={() => setNotifUser(u)}>
+                          <Text style={s.pkgOptionText}>{u.name} — {u.phone}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </>
+                )}
+              </View>
+            )}
+
+            <Text style={s.expandedLabel}>Naslov</Text>
+            <TextInput style={s.modalInput} placeholder="Naslov" placeholderTextColor={Colors.muted}
+              value={notifTitle} onChangeText={setNotifTitle} />
+            <Text style={s.expandedLabel}>Poruka</Text>
+            <TextInput style={[s.modalInput, { minHeight: 100, textAlignVertical: 'top' }]} placeholder="Poruka"
+              placeholderTextColor={Colors.muted} value={notifBody} onChangeText={setNotifBody} multiline />
+
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalBtnCancel} onPress={() => setNotifModal(false)}>
+                <Text style={s.modalBtnCancelText}>Odustani</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.modalBtnConfirm, notifSending && { opacity: 0.5 }]} onPress={sendNotification} disabled={notifSending}>
+                {notifSending
+                  ? <ActivityIndicator color={Colors.white} size="small" />
+                  : <Text style={s.modalBtnConfirmText}>Pošalji</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -1250,6 +1547,9 @@ const s = StyleSheet.create({
   slotTime: { fontFamily: Fonts.bodyBold, fontSize: 16, color: Colors.foreground },
   slotInstructor: { fontFamily: Fonts.body, fontSize: 11, color: Colors.muted },
   slotSpots: { fontFamily: Fonts.bodySemiBold, fontSize: 12, color: '#059669', marginTop: 4 },
+  slotBookedList: { marginTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border, paddingTop: 6, gap: 2 },
+  slotBookedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  slotBookedName: { fontFamily: Fonts.body, fontSize: 11, color: Colors.foreground, flex: 1 },
   // Bookings
   filterRow: { gap: 8, marginBottom: 16 },
   filterBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.secondary },
@@ -1304,6 +1604,8 @@ const s = StyleSheet.create({
   modalBtnCancelText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.foreground },
   modalBtnConfirm: { flex: 1, height: 44, borderRadius: 9999, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
   modalBtnConfirmText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.white },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, backgroundColor: Colors.background, borderRadius: 12, borderWidth: 1, borderColor: Colors.inputBorder, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12 },
+  toggleLabel: { flex: 1, fontFamily: Fonts.bodyMedium, fontSize: Sizes.small, color: Colors.foreground },
   noteModalSaveBtn: { width: '100%', height: 48, borderRadius: 9999, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center', marginTop: 4 },
   noteModalSaveBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.white },
   // History

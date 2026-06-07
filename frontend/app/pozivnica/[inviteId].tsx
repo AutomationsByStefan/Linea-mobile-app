@@ -5,7 +5,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Sizes, CardStyle, formatDateBosnian } from '../../src/theme';
+import { Colors, Fonts, Sizes, CardStyle, formatDD } from '../../src/theme';
 import { invitesAPI } from '../../src/api';
 
 const LOGO_URL = 'https://customer-assets.emergentagent.com/job_pilates-hub-12/artifacts/ny62z2sx_linea.png';
@@ -85,7 +85,7 @@ export default function PozivnicaScreen() {
         <View style={styles.detailRow}>
           <Feather name="calendar" size={18} color={Colors.primary} />
           <Text style={styles.detailText}>
-            {invite?.datum ? formatDateBosnian(invite.datum) : invite?.date || ''}
+            {invite?.datum ? formatDD(invite.datum) : invite?.date || ''}
           </Text>
         </View>
         <View style={styles.detailRow}>

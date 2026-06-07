@@ -6,12 +6,15 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Sizes, CardStyle, formatDD } from '../src/theme';
+import { Colors, Fonts, Sizes, CardStyle, formatDD, daysUntil } from '../src/theme';
 import { membershipsAPI } from '../src/api';
+import { useAuth } from '../src/context/AuthContext';
 
 export default function ClanarineScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const minusTrainings = Number(user?.minus_treninzi ?? 0) || 0;
 
   const [data, setData] = useState<any>({ active: [], past: [] });
   const [loading, setLoading] = useState(true);
@@ -46,7 +49,10 @@ export default function ClanarineScreen() {
     const name = m.package_name || m.naziv;
     const remaining = m.preostali_termini ?? m.remaining ?? 0;
     const total = m.ukupni_termini ?? m.total ?? 0;
+    const start = m.datum_pocetka || m.start_date;
     const expiry = m.datum_isteka || m.expiry_date;
+    const left = daysUntil(expiry);
+    const isExpired = isPast || m.tip === 'istekla' || (left != null && left < 0);
 
     return (
       <View style={[styles.card, isPast && styles.cardPast]} testID={`membership-${name}`}>
@@ -61,11 +67,17 @@ export default function ClanarineScreen() {
         <Text style={styles.cardTerms}>
           {isPast ? 'Iskorišteno' : 'Preostalo'}: <Text style={styles.goldText}>{remaining}</Text>/{total} termina
         </Text>
-        {expiry && (
-          <Text style={styles.cardExpiry}>
-            {isPast ? 'Istekla' : 'Važi do'}: {formatDD(expiry)}
-          </Text>
-        )}
+        <View style={styles.datesWrap}>
+          {start && <Text style={styles.cardDate}>Početak paketa: {formatDD(start)}</Text>}
+          {expiry && (isExpired ? (
+            <Text style={styles.cardExpiredText}>Paket je istekao {formatDD(expiry)}</Text>
+          ) : (
+            <>
+              <Text style={styles.cardDate}>Paket važi do: {formatDD(expiry)}</Text>
+              {left != null && <Text style={styles.cardDaysLeft}>Preostalo {left} dana</Text>}
+            </>
+          ))}
+        </View>
         {!isPast && (
           <View style={styles.progressBg}>
             <View style={[styles.progressFill, { width: `${Math.min(100, (remaining / (total || 1)) * 100)}%` }]} />
@@ -90,6 +102,14 @@ export default function ClanarineScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
+        {minusTrainings > 0 && (
+          <View style={styles.minusBanner} testID="minus-banner">
+            <Feather name="alert-triangle" size={20} color={Colors.danger} />
+            <Text style={styles.minusBannerText}>
+              Imate {minusTrainings} trening(a) u minusu. Potrebna je uplata.
+            </Text>
+          </View>
+        )}
         {loading ? (
           <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
         ) : (
@@ -151,9 +171,19 @@ const styles = StyleSheet.create({
   statusExpiredText: { color: Colors.muted },
   cardTerms: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.foreground, marginBottom: 4 },
   goldText: { fontFamily: Fonts.bodyBold, color: Colors.primary },
-  cardExpiry: { fontFamily: Fonts.body, fontSize: Sizes.tiny, color: Colors.muted, marginBottom: 12 },
+  datesWrap: { marginBottom: 12, gap: 2 },
+  cardDate: { fontFamily: Fonts.bodyMedium, fontSize: Sizes.tiny, color: Colors.foreground },
+  cardDaysLeft: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.tiny, color: Colors.primary },
+  cardExpiredText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.tiny, color: Colors.danger },
   progressBg: { height: 6, backgroundColor: Colors.secondary, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: Colors.primary, borderRadius: 3 },
   emptyWrap: { alignItems: 'center', paddingVertical: 40, gap: 12 },
   emptyText: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted },
+  minusBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: 'rgba(220,53,69,0.1)',
+    borderWidth: 1, borderColor: Colors.danger,
+    borderRadius: 16, padding: 16, marginBottom: 20,
+  },
+  minusBannerText: { flex: 1, fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.danger },
 });

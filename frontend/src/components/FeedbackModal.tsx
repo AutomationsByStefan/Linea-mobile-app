@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { Colors, Fonts, Sizes, formatDateBosnian } from '../theme';
+import { Colors, Fonts, Sizes, formatDD } from '../theme';
 import { feedbackAPI } from '../api';
 
 interface PendingTraining {
@@ -79,7 +79,7 @@ export default function FeedbackModal({ training, visible, onClose, onSubmitted 
           <Text style={styles.title}>Kako ti je prijao trening?</Text>
           {datum ? (
             <Text style={styles.info}>
-              {formatDateBosnian(datum)} • {vrijeme}
+              {formatDD(datum)} • {vrijeme}
             </Text>
           ) : null}
 

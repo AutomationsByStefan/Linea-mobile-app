@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  RefreshControl, ActivityIndicator, Linking,
+  RefreshControl, ActivityIndicator, Linking, Modal, Alert,
 } from 'react-native';
 import { useRouter, useNavigation } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Sizes, Spacing, CardStyle, formatDateBosnian } from '../../src/theme';
-import { homeAPI } from '../../src/api';
+import { Colors, Fonts, Sizes, Spacing, CardStyle, formatDateWithDay, formatDD, daysUntil } from '../../src/theme';
+import { homeAPI, scheduleAPI, trainingAPI, api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
 import FeedbackModal from '../../src/components/FeedbackModal';
 
@@ -18,6 +18,7 @@ export default function HomeScreen() {
 
   const [memberships, setMemberships] = useState<any[]>([]);
   const [trainings, setTrainings] = useState<any[]>([]);
+  const [pastTrainings, setPastTrainings] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [pendingFeedback, setPendingFeedback] = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
@@ -25,17 +26,25 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [showFeedback, setShowFeedback] = useState(false);
 
+  // Trial booking (Task 3)
+  const [trialModal, setTrialModal] = useState(false);
+  const [trialSlots, setTrialSlots] = useState<any[]>([]);
+  const [trialSlotsLoading, setTrialSlotsLoading] = useState(false);
+  const [trialBooking, setTrialBooking] = useState(false);
+
   const loadData = useCallback(async () => {
     try {
-      const [mem, tr, notif, fb, req] = await Promise.allSettled([
+      const [mem, tr, notif, fb, req, past] = await Promise.allSettled([
         homeAPI.activeMemberships(),
         homeAPI.upcomingTrainings(),
         homeAPI.unreadNotifications(),
         homeAPI.pendingFeedback(),
         homeAPI.myRequests(),
+        trainingAPI.past(),
       ]);
       if (mem.status === 'fulfilled') setMemberships(Array.isArray(mem.value) ? mem.value : []);
       if (tr.status === 'fulfilled') setTrainings(Array.isArray(tr.value) ? tr.value : []);
+      if (past.status === 'fulfilled') setPastTrainings(Array.isArray(past.value) ? past.value : []);
       if (notif.status === 'fulfilled') {
         const val = notif.value;
         setUnreadCount(typeof val === 'number' ? val : Array.isArray(val) ? val.length : val?.count || 0);
@@ -52,6 +61,40 @@ export default function HomeScreen() {
       setLoading(false);
     }
   }, []);
+
+  const openTrialModal = async () => {
+    setTrialModal(true); setTrialSlots([]); setTrialSlotsLoading(true);
+    try {
+      const data = await scheduleAPI.getSchedule();
+      const all = Array.isArray(data) ? data : [];
+      const now = new Date();
+      const available = all.filter((sl: any) => {
+        const dt = new Date(`${sl.datum || sl.date}T${sl.vrijeme || sl.time || '23:59'}`);
+        if (isNaN(dt.getTime()) || dt <= now) return false;
+        return (sl.slobodna_mjesta ?? sl.available_spots ?? 0) > 0;
+      }).sort((a: any, b: any) => {
+        const ka = `${a.datum || a.date} ${a.vrijeme || a.time}`;
+        const kb = `${b.datum || b.date} ${b.vrijeme || b.time}`;
+        return ka.localeCompare(kb);
+      });
+      setTrialSlots(available);
+    } catch (e) { setTrialSlots([]); }
+    finally { setTrialSlotsLoading(false); }
+  };
+
+  const bookTrial = async (slot: any) => {
+    setTrialBooking(true);
+    try {
+      await api.post('/api/bookings/trial', { slot_id: slot.id || slot._id || slot.slot_id });
+      setTrialModal(false);
+      Alert.alert('Uspješno', 'Probni trening uspješno zakazan!');
+      await loadData();
+    } catch (e: any) {
+      Alert.alert('Greška', e.message || 'Nije moguće zakazati probni trening');
+    } finally {
+      setTrialBooking(false);
+    }
+  };
 
   // Re-fetch data on tab focus (cross-screen refresh)
   const navigation = useNavigation();
@@ -75,6 +118,12 @@ export default function HomeScreen() {
     : null;
   const activeMembership = memberships[0];
   const pendingReq = pendingRequests.find((r: any) => r.status === 'pending' || r.status === 'na_cekanju');
+
+  // Task 4 — minus trainings warning
+  const minusTrainings = Number(user?.minus_treninzi ?? activeMembership?.minus_treninzi ?? 0) || 0;
+  // Task 3 — trial eligibility: no training history and no active membership
+  const hasHistory = trainings.length > 0 || pastTrainings.length > 0;
+  const showTrialButton = !hasHistory && !activeMembership;
 
   if (loading) {
     return (
@@ -120,6 +169,35 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Minus trainings warning (Task 4) */}
+        {minusTrainings > 0 && (
+          <View style={styles.minusBanner} testID="minus-banner">
+            <Feather name="alert-triangle" size={20} color={Colors.danger} />
+            <Text style={styles.minusBannerText}>
+              Imate {minusTrainings} trening(a) u minusu. Potrebna je uplata.
+            </Text>
+          </View>
+        )}
+
+        {/* Free trial training for new users (Task 3) */}
+        {showTrialButton && (
+          <TouchableOpacity
+            testID="trial-book-btn"
+            style={styles.trialCard}
+            activeOpacity={0.85}
+            onPress={openTrialModal}
+          >
+            <View style={styles.trialIcon}>
+              <Feather name="gift" size={24} color={Colors.white} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.trialTitle}>Zakaži besplatan probni trening</Text>
+              <Text style={styles.trialSubtitle}>Isprobaj svoj prvi trening bez obaveza</Text>
+            </View>
+            <Feather name="chevron-right" size={22} color={Colors.white} />
+          </TouchableOpacity>
+        )}
+
         {/* Active Memberships */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -158,6 +236,27 @@ export default function HomeScreen() {
                     (activeMembership.ukupni_termini ?? activeMembership.total ?? 1)) * 100)}%`
                 }]} />
               </View>
+              {(() => {
+                const start = activeMembership.datum_pocetka || activeMembership.start_date;
+                const expiry = activeMembership.datum_isteka || activeMembership.expiry_date || activeMembership.expiry;
+                const left = daysUntil(expiry);
+                const isExpired = activeMembership.tip === 'istekla' || (left != null && left < 0);
+                return (
+                  <View style={styles.membershipDates}>
+                    {start && (
+                      <Text style={styles.membershipDateText}>Početak paketa: {formatDD(start)}</Text>
+                    )}
+                    {expiry && (isExpired ? (
+                      <Text style={styles.membershipExpiredText}>Paket je istekao {formatDD(expiry)}</Text>
+                    ) : (
+                      <>
+                        <Text style={styles.membershipDateText}>Paket važi do: {formatDD(expiry)}</Text>
+                        {left != null && <Text style={styles.membershipDaysLeft}>Preostalo {left} dana</Text>}
+                      </>
+                    ))}
+                  </View>
+                );
+              })()}
             </View>
           ) : (
             <View style={styles.card}>
@@ -189,7 +288,7 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.trainingInfo}>
                   <Text style={styles.trainingDate}>
-                    {formatDateBosnian(nextTraining.datum || nextTraining.date)}
+                    {formatDateWithDay(nextTraining.datum || nextTraining.date)}
                   </Text>
                   <View style={styles.timeRow}>
                     <Feather name="clock" size={14} color={Colors.muted} />
@@ -255,6 +354,49 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Trial Booking Modal (Task 3) */}
+      <Modal visible={trialModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Probni trening</Text>
+              <TouchableOpacity onPress={() => setTrialModal(false)}>
+                <Feather name="x" size={22} color={Colors.foreground} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalHint}>Izaberite termin za svoj besplatan probni trening</Text>
+            {trialSlotsLoading ? (
+              <ActivityIndicator color={Colors.primary} style={{ marginVertical: 24 }} />
+            ) : trialSlots.length === 0 ? (
+              <Text style={styles.emptyText}>Nema dostupnih termina</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 380, marginVertical: 8 }}>
+                {trialSlots.map((sl: any) => {
+                  const sid = sl.id || sl._id || sl.slot_id;
+                  const free = sl.slobodna_mjesta ?? sl.available_spots ?? 0;
+                  const total = sl.ukupno_mjesta ?? sl.total_spots ?? 3;
+                  return (
+                    <TouchableOpacity
+                      key={sid}
+                      style={styles.trialSlot}
+                      disabled={trialBooking}
+                      onPress={() => bookTrial(sl)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.trialSlotDate}>{formatDateWithDay(sl.datum || sl.date)}</Text>
+                        <Text style={styles.trialSlotTime}>{sl.vrijeme || sl.time} • {free}/{total} slobodno</Text>
+                      </View>
+                      <Feather name="chevron-right" size={20} color={Colors.primary} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+            {trialBooking && <ActivityIndicator color={Colors.primary} style={{ marginTop: 8 }} />}
+          </View>
+        </View>
+      </Modal>
 
       {/* Feedback Modal */}
       {showFeedback && pendingFeedback.length > 0 && (
@@ -335,6 +477,43 @@ const styles = StyleSheet.create({
   memberBadgeTextExpired: { color: Colors.danger },
   membershipTerms: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.foreground, marginBottom: 12 },
   goldText: { fontFamily: Fonts.bodyBold, color: Colors.primary },
+  membershipDates: { marginTop: 12, gap: 2 },
+  membershipDateText: { fontFamily: Fonts.bodyMedium, fontSize: Sizes.small, color: Colors.foreground },
+  membershipDaysLeft: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.primary },
+  membershipExpiredText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.danger },
+  // Minus warning banner (Task 4)
+  minusBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: 'rgba(220,53,69,0.1)',
+    borderWidth: 1, borderColor: Colors.danger,
+    borderRadius: 16, padding: 16, marginBottom: 20,
+  },
+  minusBannerText: { flex: 1, fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.danger },
+  // Trial card (Task 3)
+  trialCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: Colors.primary, borderRadius: 20, padding: 18, marginBottom: 24,
+    shadowColor: 'rgba(166, 139, 91, 0.4)', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1, shadowRadius: 16, elevation: 4,
+  },
+  trialIcon: {
+    width: 48, height: 48, borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center',
+  },
+  trialTitle: { fontFamily: Fonts.bodyBold, fontSize: Sizes.body, color: Colors.white, marginBottom: 2 },
+  trialSubtitle: { fontFamily: Fonts.body, fontSize: Sizes.tiny, color: 'rgba(255,255,255,0.85)' },
+  // Trial modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalCard: { backgroundColor: Colors.cardBg, borderRadius: 24, padding: 24, width: '100%', maxWidth: 420 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  modalTitle: { fontFamily: Fonts.heading, fontSize: 18, color: Colors.foreground },
+  modalHint: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted, marginBottom: 8 },
+  trialSlot: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.secondary, borderRadius: 14, padding: 14, marginBottom: 8,
+  },
+  trialSlotDate: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.foreground },
+  trialSlotTime: { fontFamily: Fonts.body, fontSize: Sizes.tiny, color: Colors.muted, marginTop: 2 },
   progressBg: {
     height: 6,
     backgroundColor: Colors.secondary,

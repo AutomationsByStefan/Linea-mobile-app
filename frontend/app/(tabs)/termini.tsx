@@ -7,8 +7,8 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from 'expo-router';
 import Svg, { Path, Rect } from 'react-native-svg';
-import { Colors, Fonts, Sizes, CardStyle, BosnianDaysShort, formatDateBosnian } from '../../src/theme';
-import { scheduleAPI, trainingAPI } from '../../src/api';
+import { Colors, Fonts, Sizes, CardStyle, BosnianDaysShort, formatDD } from '../../src/theme';
+import { scheduleAPI, trainingAPI, homeAPI } from '../../src/api';
 
 // Reformer bed SVG icon
 function BedIcon({ filled = false, size = 20 }: { filled?: boolean; size?: number }) {
@@ -47,6 +47,7 @@ export default function TerminiScreen() {
   const [selectedDate, setSelectedDate] = useState(workingDays[0]);
   const [slots, setSlots] = useState<any[]>([]);
   const [myTrainings, setMyTrainings] = useState<any[]>([]);
+  const [memberships, setMemberships] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [booking, setBooking] = useState(false);
@@ -54,12 +55,14 @@ export default function TerminiScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const [sched, upcoming] = await Promise.allSettled([
+      const [sched, upcoming, mem] = await Promise.allSettled([
         scheduleAPI.getSchedule(),
         trainingAPI.upcoming(),
+        homeAPI.activeMemberships(),
       ]);
       if (sched.status === 'fulfilled') setSlots(Array.isArray(sched.value) ? sched.value : []);
       if (upcoming.status === 'fulfilled') setMyTrainings(Array.isArray(upcoming.value) ? upcoming.value : []);
+      if (mem.status === 'fulfilled') setMemberships(Array.isArray(mem.value) ? mem.value : []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -96,6 +99,13 @@ export default function TerminiScreen() {
   }).sort((a: any, b: any) => (a.vrijeme || a.time || '').localeCompare(b.vrijeme || b.time || ''));
 
   const myBookingToday = myTrainings.find((t: any) => (t.datum || t.date) === dateStr);
+
+  // Task 4 — allow booking with 0 remaining sessions; show a "minus" note in confirm step
+  const activeMembership = memberships[0];
+  const remainingSessions = activeMembership
+    ? (activeMembership.preostali_termini ?? activeMembership.remaining ?? 0)
+    : 0;
+  const noSessions = remainingSessions <= 0;
 
   const handleBook = async (slot: any) => {
     setBooking(true);
@@ -230,9 +240,17 @@ export default function TerminiScreen() {
           <View style={st.modalCard}>
             <Text style={st.modalTitle}>Potvrda termina</Text>
             <Text style={st.modalDate}>
-              {confirmSlot && formatDateBosnian(confirmSlot.datum || confirmSlot.date || dateStr)}
+              {confirmSlot && formatDD(confirmSlot.datum || confirmSlot.date || dateStr)}
             </Text>
             <Text style={st.modalTime}>{confirmSlot?.vrijeme || confirmSlot?.time}</Text>
+            {noSessions && (
+              <View style={st.minusNote}>
+                <Feather name="alert-triangle" size={16} color={Colors.danger} />
+                <Text style={st.minusNoteText}>
+                  Nemate preostale termine. Ovaj trening će biti uračunat u minus.
+                </Text>
+              </View>
+            )}
             <Text style={st.modalQuestion}>Da li potvrđujete dolazak?</Text>
             <View style={st.modalBtns}>
               <TouchableOpacity testID="confirm-cancel-btn" style={st.modalBtnNo} onPress={() => setConfirmSlot(null)}>
@@ -372,6 +390,11 @@ const st = StyleSheet.create({
   modalDate: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.foreground, textAlign: 'center' },
   modalTime: { fontFamily: Fonts.bodyBold, fontSize: Sizes.h2, color: Colors.primary, textAlign: 'center', marginBottom: 16 },
   modalQuestion: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted, textAlign: 'center', marginBottom: 20 },
+  minusNote: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(220,53,69,0.1)', borderRadius: 12, padding: 12, marginBottom: 16,
+  },
+  minusNoteText: { flex: 1, fontFamily: Fonts.bodySemiBold, fontSize: Sizes.tiny, color: Colors.danger },
   modalBtns: { flexDirection: 'row', gap: 12 },
   modalBtnNo: { flex: 1, height: 48, borderRadius: 9999, borderWidth: 2, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
   modalBtnNoText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.foreground },

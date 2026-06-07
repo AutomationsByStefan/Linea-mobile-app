@@ -60,24 +60,6 @@ export const CardStyle = {
 
 export const BosnianDays = ['Nedjelja', 'Ponedjeljak', 'Utorak', 'Srijeda', 'Četvrtak', 'Petak', 'Subota'];
 export const BosnianDaysShort = ['NED', 'PON', 'UTO', 'SRI', 'ČET', 'PET', 'SUB'];
-export const BosnianMonths = ['januar', 'februar', 'mart', 'april', 'maj', 'juni', 'juli', 'august', 'septembar', 'oktobar', 'novembar', 'decembar'];
-
-export function formatDateBosnian(dateStr: string): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr;
-  const day = BosnianDays[d.getDay()];
-  const num = d.getDate();
-  const month = BosnianMonths[d.getMonth()];
-  return `${day}, ${num}. ${month}`;
-}
-
-export function formatDateShort(dateStr: string): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr;
-  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}.`;
-}
 
 /** DD.MM.YYYY format used everywhere */
 export function formatDD(dateStr: string): string {
@@ -85,4 +67,23 @@ export function formatDD(dateStr: string): string {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return dateStr.slice(0, 10);
   return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}.`;
+}
+
+/** Whole days from today until the given date. Negative if the date is in the past. */
+export function daysUntil(dateStr: string): number | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / 86400000);
+}
+
+/** "Petak, 06.06.2026." — weekday + DD.MM.YYYY */
+export function formatDateWithDay(dateStr: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return `${BosnianDays[d.getDay()]}, ${formatDD(dateStr)}`;
 }
