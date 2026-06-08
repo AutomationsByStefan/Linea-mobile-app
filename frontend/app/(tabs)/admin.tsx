@@ -878,6 +878,13 @@ function UsersSection() {
   const [packages, setPackages] = useState<any[]>([]);
   const [memberStartDate, setMemberStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [memberSaving, setMemberSaving] = useState(false);
+  // Edit start date of an existing active membership
+  const [editDateModal, setEditDateModal] = useState<any>(null);
+  const [editDateMembershipId, setEditDateMembershipId] = useState('');
+  const [editDateStartDate, setEditDateStartDate] = useState('');
+  const [editDateCurrent, setEditDateCurrent] = useState('');
+  const [editDateLoading, setEditDateLoading] = useState(false);
+  const [editDateSaving, setEditDateSaving] = useState(false);
   // Admin book training (Task 7)
   const [bookModal, setBookModal] = useState<any>(null);
   const [bookSlots, setBookSlots] = useState<any[]>([]);
@@ -1010,6 +1017,66 @@ function UsersSection() {
     finally { setMemberSaving(false); }
   };
 
+  // Edit start date of an existing active membership. The membership id and its
+  // current start date are pulled from the membership history (the records that
+  // actually carry an id), so we patch the right membership.
+  const openEditStartDate = async (u: any) => {
+    setEditDateModal(u);
+    setEditDateMembershipId('');
+    setEditDateStartDate('');
+    setEditDateCurrent('');
+    setEditDateLoading(true);
+    try {
+      const data = await api.get(`/api/admin/users/${u.user_id}/membership-history`);
+      const list = Array.isArray(data) ? data : (data?.memberships || data?.history || []);
+      const today = new Date().toISOString().slice(0, 10);
+      const active = (Array.isArray(list) ? list : []).find((m: any) => {
+        const endDate = m.end_date || m.datum_isteka || m.expires_at;
+        const rawStatus = (m.status || '').toString().toLowerCase();
+        return m.is_active ?? m.aktivna ??
+          (rawStatus ? (rawStatus.includes('aktiv') || rawStatus === 'active')
+            : (endDate ? String(endDate) >= today : false));
+      }) || {};
+      const mid = active.id || active._id || active.membership_id || active.clanarina_id || '';
+      const start = active.start_date || active.datum_pocetka || active.datum_aktivacije
+        || u.datum_pocetka || u.datum_aktivacije || '';
+      const iso = String(start).slice(0, 10);
+      setEditDateMembershipId(String(mid));
+      setEditDateStartDate(iso);
+      setEditDateCurrent(iso);
+    } catch (e) {
+      const iso = String(u.datum_pocetka || u.datum_aktivacije || '').slice(0, 10);
+      setEditDateStartDate(iso);
+      setEditDateCurrent(iso);
+    } finally {
+      setEditDateLoading(false);
+    }
+  };
+
+  const saveStartDate = async () => {
+    if (!editDateStartDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      Alert.alert('Greška', 'Unesite datum u formatu YYYY-MM-DD');
+      return;
+    }
+    if (!editDateMembershipId) {
+      Alert.alert('Greška', 'Aktivna članarina nije pronađena.');
+      return;
+    }
+    setEditDateSaving(true);
+    try {
+      await api.patch(`/api/admin/memberships/${editDateMembershipId}/update-start-date`, {
+        start_date: editDateStartDate,
+      });
+      Alert.alert('Uspješno', 'Datum početka uspješno promijenjen.');
+      setEditDateModal(null);
+      await load();
+    } catch (e: any) {
+      Alert.alert('Greška', e.message || 'Greška pri promjeni datuma');
+    } finally {
+      setEditDateSaving(false);
+    }
+  };
+
   // Task 7/8 — Admin books a training for the user (no session check; backend overrides)
   const openBookModal = async (u: any) => {
     setBookModal(u); setSelectedSlot(null); setBookSlots([]); setBookSlotsLoading(true);
@@ -1124,6 +1191,19 @@ function UsersSection() {
                     <View style={s.expandedStat}><Text style={s.expandedLabel}>Ističe</Text><Text style={s.expandedValue}>{formatDD(u.datum_isteka)}</Text></View>
                     <View style={s.expandedStat}><Text style={s.expandedLabel}>Zakazani</Text><Text style={s.expandedValue}>{u.predstojeći_treninzi || 0} termina</Text></View>
                   </View>
+
+                  {u.aktivna_clanarina && (
+                    <View style={s.editDateRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.expandedLabel}>Datum početka paketa</Text>
+                        <Text style={s.expandedValue}>{formatDD(u.datum_pocetka || u.datum_aktivacije)}</Text>
+                      </View>
+                      <TouchableOpacity style={s.actionBtnOutline} onPress={() => openEditStartDate(u)}>
+                        <Feather name="edit-2" size={14} color={Colors.foreground} />
+                        <Text style={s.actionBtnOutlineText}>Izmijeni datum</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
 
                   {u.notes ? (
                     <View style={s.noteBox}><Text style={s.noteLabel}>BILJEŠKA</Text><Text style={s.noteText}>{u.notes}</Text></View>
@@ -1279,6 +1359,44 @@ function UsersSection() {
                 {memberSaving
                   ? <ActivityIndicator color={Colors.white} size="small" />
                   : <Text style={s.modalBtnConfirmText}>Kreiraj članarinu</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Membership Start Date Modal */}
+      <Modal visible={!!editDateModal} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Izmijeni datum početka</Text>
+              <TouchableOpacity onPress={() => setEditDateModal(null)}>
+                <Feather name="x" size={22} color={Colors.foreground} />
+              </TouchableOpacity>
+            </View>
+            <Text style={s.userSub}>Korisnik: {editDateModal?.name}</Text>
+            {editDateLoading ? (
+              <ActivityIndicator color={Colors.primary} style={{ marginVertical: 24 }} />
+            ) : (
+              <>
+                <Text style={[s.expandedLabel, { marginTop: 16 }]}>Trenutni datum početka</Text>
+                <Text style={[s.expandedValue, { marginBottom: 12 }]}>{editDateCurrent ? formatDD(editDateCurrent) : '-'}</Text>
+                <Text style={s.expandedLabel}>Novi datum početka (YYYY-MM-DD)</Text>
+                <TextInput style={s.modalInput} placeholder="2026-04-13" placeholderTextColor={Colors.muted}
+                  value={editDateStartDate} onChangeText={setEditDateStartDate} keyboardType="numbers-and-punctuation" />
+                <Text style={s.userSub}>Datum isteka se automatski računa (datum početka + 35 dana).</Text>
+              </>
+            )}
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalBtnCancel} onPress={() => setEditDateModal(null)}>
+                <Text style={s.modalBtnCancelText}>Odustani</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.modalBtnConfirm, (editDateLoading || editDateSaving) && { opacity: 0.5 }]}
+                onPress={saveStartDate} disabled={editDateLoading || editDateSaving}>
+                {editDateSaving
+                  ? <ActivityIndicator color={Colors.white} size="small" />
+                  : <Text style={s.modalBtnConfirmText}>Sačuvaj</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -1590,6 +1708,7 @@ const s = StyleSheet.create({
   noteBox: { backgroundColor: '#A68B5B20', borderRadius: 10, padding: 10, marginBottom: 12 },
   noteLabel: { fontFamily: Fonts.bodySemiBold, fontSize: 10, color: Colors.primary, marginBottom: 4 },
   noteText: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.foreground },
+  editDateRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: Colors.cardBg, borderRadius: 10, padding: 10, marginBottom: 12 },
   actionRow: { gap: 8 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
   actionBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: '#FFF' },
