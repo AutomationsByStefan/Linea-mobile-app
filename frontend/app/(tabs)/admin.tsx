@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Sizes, CardStyle, formatDD } from '../../src/theme';
+import { Colors, Fonts, Sizes, CardStyle, formatDD, toDateTime } from '../../src/theme';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
 
@@ -657,7 +657,7 @@ function ScheduleSection() {
   };
 
   const deleteDay = async (datum: string) => {
-    Alert.alert('Obriši cijeli dan', `Obrisati sve termine za ${datum}?`, [
+    Alert.alert('Obriši cijeli dan', `Obrisati sve termine za ${formatDD(datum)}?`, [
       { text: 'Ne', style: 'cancel' },
       { text: 'Da, obriši dan', style: 'destructive', onPress: async () => {
         try {
@@ -721,7 +721,7 @@ function ScheduleSection() {
       {dates.map(date => (
         <View key={date} style={s.scheduleDay}>
           <View style={s.scheduleDayHeader}>
-            <Text style={s.scheduleDateLabel}>{date}</Text>
+            <Text style={s.scheduleDateLabel}>{formatDD(date)}</Text>
             <TouchableOpacity testID={`delete-day-${date}`} style={s.deleteDayBtn} onPress={() => deleteDay(date)}>
               <Feather name="trash-2" size={12} color={Colors.danger} />
               <Text style={s.deleteDayText}>Obriši dan</Text>
@@ -730,8 +730,8 @@ function ScheduleSection() {
           <View style={s.slotGrid}>
             {grouped[date].sort((a: any, b: any) => a.vrijeme.localeCompare(b.vrijeme)).map((sl: any) => {
               const booked = bookedFor(sl.datum, sl.vrijeme);
-              const slotTime = new Date(`${sl.datum}T${sl.vrijeme || '23:59'}`);
-              const isFutureSlot = !isNaN(slotTime.getTime()) && slotTime > new Date();
+              const slotTime = toDateTime(sl.datum, sl.vrijeme);
+              const isFutureSlot = !!slotTime && slotTime.getTime() > Date.now();
               return (
               <View key={sl.id} style={s.slotCard} testID={`admin-slot-${sl.id}`}>
                 <View style={s.slotHeader}>
@@ -804,13 +804,15 @@ function BookingsSection() {
   const filterLabels: Record<string, string> = { all: 'Svi', upcoming: 'Predstojeći', completed: 'Završeni', cancelled: 'Otkazani' };
   const statusColors: Record<string, string> = { upcoming: '#2563EB', completed: '#059669', cancelled: Colors.danger, predstojeći: '#2563EB', završeni: '#059669', otkazani: Colors.danger };
 
-  // Auto-classify bookings by time — past → Završeni, cancelled → Otkazani
+  // Auto-classify bookings by time — past → Završeni, cancelled → Otkazani.
+  // toDateTime tolerates both YYYY-MM-DD and DD.MM.YYYY backend dates; an
+  // unparseable date is treated as upcoming rather than silently mislabeled.
   const now = new Date();
   const classifiedBookings = bookings.map((b: any) => {
     const rawStatus = (b.status || b.tip || '').toLowerCase();
     if (rawStatus.includes('otkazan') || rawStatus === 'cancelled') return { ...b, _status: 'cancelled' };
-    const dt = new Date(`${b.datum || b.date}T${b.vrijeme || b.time || '23:59'}`);
-    if (dt < now) return { ...b, _status: 'completed' };
+    const dt = toDateTime(b.datum || b.date, b.vrijeme || b.time);
+    if (dt && dt.getTime() < now.getTime()) return { ...b, _status: 'completed' };
     return { ...b, _status: 'upcoming' };
   });
 
@@ -945,7 +947,7 @@ function UsersSection() {
     try {
       await api.post(`/api/admin/users/${freezeModal.user_id}/freeze`, {
         start_date: freezeFrom, end_date: freezeTo, reason: freezeReason });
-      Alert.alert('Uspješno', `Korisnik zamrznut od ${freezeFrom} do ${freezeTo}`);
+      Alert.alert('Uspješno', `Korisnik zamrznut od ${formatDD(freezeFrom)} do ${formatDD(freezeTo)}`);
       setFreezeModal(null); setFreezeFrom(''); setFreezeTo(''); setFreezeReason('');
       await load();
     } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
@@ -1252,9 +1254,9 @@ function UsersSection() {
           <View style={s.modalContent}>
             <Text style={s.modalTitle}>Dodaj članarinu</Text>
             <Text style={s.userSub}>Korisnik: {memberModal?.name}</Text>
-            <Text style={[s.expandedLabel, { marginTop: 12 }]}>Datum početka (YYYY-MM-DD)</Text>
+            <Text style={[s.expandedLabel, { marginTop: 12 }]}>Datum početka paketa (YYYY-MM-DD)</Text>
             <TextInput style={s.modalInput} placeholder="2026-04-13" placeholderTextColor={Colors.muted}
-              value={memberStartDate} onChangeText={setMemberStartDate} />
+              value={memberStartDate} onChangeText={setMemberStartDate} keyboardType="numbers-and-punctuation" />
             <Text style={s.expandedLabel}>Odaberi paket</Text>
             <View style={s.pkgList}>
               {packages.map((p: any) => {

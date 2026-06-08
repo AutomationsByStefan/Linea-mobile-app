@@ -61,19 +61,51 @@ export const CardStyle = {
 export const BosnianDays = ['Nedjelja', 'Ponedjeljak', 'Utorak', 'Srijeda', 'Četvrtak', 'Petak', 'Subota'];
 export const BosnianDaysShort = ['NED', 'PON', 'UTO', 'SRI', 'ČET', 'PET', 'SUB'];
 
+/**
+ * Parse a date string in either YYYY-MM-DD (ISO, optionally with a time part)
+ * or DD.MM.YYYY(.) form into a Date at LOCAL midnight. Returns null if it can't
+ * be parsed. Building the Date from explicit components avoids the UTC-midnight
+ * off-by-one that `new Date("2026-06-05")` causes in negative timezones.
+ */
+export function parseDate(dateStr?: string | null): Date | null {
+  if (!dateStr) return null;
+  const str = String(dateStr).trim();
+  // ISO: 2026-06-05 (with optional Thh:mm... suffix)
+  let m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  // European: 05.06.2026
+  m = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Combine a date string (either format) with an HH:MM time into a Date.
+ * When the time is missing/unparseable it falls back to end-of-day, so a
+ * training counts as "completed" only once its whole day has passed.
+ */
+export function toDateTime(dateStr?: string | null, timeStr?: string | null): Date | null {
+  const d = parseDate(dateStr);
+  if (!d) return null;
+  const m = String(timeStr ?? '').match(/^(\d{1,2}):(\d{2})/);
+  if (m) d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  else d.setHours(23, 59, 59, 0);
+  return d;
+}
+
 /** DD.MM.YYYY format used everywhere */
 export function formatDD(dateStr: string): string {
   if (!dateStr) return '-';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr.slice(0, 10);
+  const d = parseDate(dateStr);
+  if (!d) return String(dateStr).slice(0, 10);
   return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}.`;
 }
 
 /** Whole days from today until the given date. Negative if the date is in the past. */
 export function daysUntil(dateStr: string): number | null {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return null;
+  const d = parseDate(dateStr);
+  if (!d) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   d.setHours(0, 0, 0, 0);
@@ -82,8 +114,7 @@ export function daysUntil(dateStr: string): number | null {
 
 /** "Petak, 06.06.2026." — weekday + DD.MM.YYYY */
 export function formatDateWithDay(dateStr: string): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr;
+  const d = parseDate(dateStr);
+  if (!d) return dateStr;
   return `${BosnianDays[d.getDay()]}, ${formatDD(dateStr)}`;
 }
