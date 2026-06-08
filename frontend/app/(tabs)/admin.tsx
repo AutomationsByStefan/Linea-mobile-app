@@ -349,7 +349,7 @@ function FinanceSection() {
   const load = useCallback(async () => {
     try {
       const [f, sa, ca, w] = await Promise.allSettled([
-        api.get('/api/admin/financial'),
+        api.get('/api/admin/financial?from=2026-04'),
         api.get('/api/admin/analytics/slots'),
         api.get('/api/admin/analytics/clients'),
         api.get('/api/admin/warnings'),
@@ -377,7 +377,12 @@ function FinanceSection() {
 
   if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
-  const months = finance?.mjesecni_prihod || [];
+  // Only show months from April 2026 onwards (newest first). The backend filters via
+  // ?from=2026-04, but we guard client-side in case it returns extra months.
+  const FINANCE_FROM = '2026-04';
+  const months = (finance?.mjesecni_prihod || [])
+    .filter((m: any) => m && m.month && m.month >= FINANCE_FROM)
+    .sort((a: any, b: any) => String(b.month).localeCompare(String(a.month)));
 
   return (
     <ScrollView style={s.flex} contentContainerStyle={s.content}
@@ -420,6 +425,10 @@ function FinanceSection() {
             const manualTotal = m.manual_revenue || 0;
             const pkgTotal = m.pkg_revenue || 0;
             const isSelected = selectedMonth?.month === m.month;
+            // Who paid this month — list of memberships started in this month.
+            // Tolerant of several backend field names for the same data.
+            const payments: any[] = m.payments || m.uplate || m.memberships || m.clanarine || m.new_memberships_list || [];
+            const newCount = m.new_memberships ?? m.broj_clanarina ?? m.new_memberships_count ?? payments.length;
 
             return (
               <TouchableOpacity key={m.month} style={s.card} onPress={() => setSelectedMonth(isSelected ? null : m)}
@@ -444,19 +453,39 @@ function FinanceSection() {
                 {isSelected && (
                   <View style={s.monthDetail}>
                     <View style={s.financeRow}>
-                      <View style={s.finBox}><Text style={s.finLabel}>Paketi</Text><Text style={s.finValue}>{pkgTotal} KM</Text></View>
-                      <View style={s.finBox}><Text style={s.finLabel}>Ručno</Text><Text style={s.finValue}>{manualTotal} KM</Text></View>
+                      <View style={s.finBox}><Text style={s.finLabel}>Ukupan prihod</Text><Text style={s.finValue}>{m.revenue || 0} KM</Text></View>
+                      <View style={s.finBox}><Text style={s.finLabel}>Nove članarine</Text><Text style={s.finValue}>{newCount}</Text></View>
                     </View>
                     <View style={s.detailRow}>
                     <Text style={s.userName}>Paketi</Text>
-                    <Text style={s.finPkgPrice}>{m.pkg_revenue || 0} KM</Text>
+                    <Text style={s.finPkgPrice}>{pkgTotal} KM</Text>
                     </View>
-                    {(m.manual_revenue || 0) > 0 && (
+                    {manualTotal > 0 && (
                     <View style={s.detailRow}>
                     <Text style={s.userName}>Ručni prihodi</Text>
-                    <Text style={s.finPkgPrice}>{m.manual_revenue} KM</Text>
+                    <Text style={s.finPkgPrice}>{manualTotal} KM</Text>
                     </View>
                       )}
+
+                    {/* Ko je platio — list of memberships started this month */}
+                    <Text style={s.detailLabel}>Ko je platio</Text>
+                    {payments.length === 0 ? (
+                      <Text style={s.emptyText}>Nema novih članarina ovog mjeseca</Text>
+                    ) : payments.map((p: any, pi: number) => {
+                      const pName = p.user_name || p.name || p.korisnik_ime || p.korisnik || 'Korisnik';
+                      const pPkg = p.package_name || p.naziv_paketa || p.naziv || p.paket || '-';
+                      const pAmt = p.amount ?? p.cijena ?? p.price ?? p.iznos ?? 0;
+                      const pDate = p.date || p.datum_pocetka || p.start_date || p.datum;
+                      return (
+                        <View key={pi} style={s.payRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={s.userName}>{pName}</Text>
+                            <Text style={s.userSub}>{pPkg}{pDate ? ` • ${formatDD(pDate)}` : ''}</Text>
+                          </View>
+                          <Text style={s.finPkgPrice}>{pAmt} KM</Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 )}
               </TouchableOpacity>
@@ -877,6 +906,7 @@ function UsersSection() {
   const [selectedPkg, setSelectedPkg] = useState('');
   const [packages, setPackages] = useState<any[]>([]);
   const [memberStartDate, setMemberStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [memberPrice, setMemberPrice] = useState('');
   const [memberSaving, setMemberSaving] = useState(false);
   // Edit start date of an existing active membership
   const [editDateModal, setEditDateModal] = useState<any>(null);
@@ -908,6 +938,14 @@ function UsersSection() {
   const [pastTrainingTime, setPastTrainingTime] = useState('');
   const [pastTrainingSaving, setPastTrainingSaving] = useState(false);
   const [pastTrainingHistorical, setPastTrainingHistorical] = useState(false);
+  // Historical membership (Task 3)
+  const [histPkgModal, setHistPkgModal] = useState<any>(null);
+  const [histPkgName, setHistPkgName] = useState('');
+  const [histPkgPrice, setHistPkgPrice] = useState('');
+  const [histPkgDate, setHistPkgDate] = useState('');
+  const [histPkgTotal, setHistPkgTotal] = useState('');
+  const [histPkgUsed, setHistPkgUsed] = useState('');
+  const [histPkgSaving, setHistPkgSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -998,6 +1036,51 @@ function UsersSection() {
     }
   };
 
+  const openHistPkgModal = (u: any) => {
+    setHistPkgModal(u);
+    setHistPkgName('');
+    setHistPkgPrice('');
+    setHistPkgDate('');
+    setHistPkgTotal('');
+    setHistPkgUsed('');
+  };
+
+  const addHistoricalMembership = async () => {
+    if (!histPkgModal) return;
+    if (!histPkgName.trim()) {
+      Alert.alert('Greška', 'Unesite naziv paketa');
+      return;
+    }
+    if (!histPkgDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      Alert.alert('Greška', 'Unesite datum u formatu YYYY-MM-DD');
+      return;
+    }
+    const priceVal = parseFloat(histPkgPrice.replace(',', '.'));
+    const totalVal = parseInt(histPkgTotal, 10);
+    const usedVal = parseInt(histPkgUsed, 10);
+    if (isNaN(totalVal)) {
+      Alert.alert('Greška', 'Unesite ukupan broj termina');
+      return;
+    }
+    setHistPkgSaving(true);
+    try {
+      await api.post(`/api/admin/users/${histPkgModal.user_id}/add-historical-membership`, {
+        naziv_paketa: histPkgName.trim(),
+        cijena: isNaN(priceVal) ? 0 : priceVal,
+        datum_pocetka: histPkgDate,
+        ukupno_termina: totalVal,
+        iskoristeno_termina: isNaN(usedVal) ? 0 : usedVal,
+      });
+      Alert.alert('Uspješno', 'Istorijski paket uspješno dodan.');
+      setHistPkgModal(null);
+      await load();
+    } catch (e: any) {
+      Alert.alert('Greška', e.message || 'Greška pri dodavanju paketa');
+    } finally {
+      setHistPkgSaving(false);
+    }
+  };
+
   const addMembership = async () => {
     if (!memberModal || !selectedPkg) return;
     if (!memberStartDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
@@ -1006,12 +1089,14 @@ function UsersSection() {
     }
     setMemberSaving(true);
     try {
+      const priceVal = parseFloat(memberPrice.replace(',', '.'));
       await api.post(`/api/admin/users/${memberModal.user_id}/add-membership`, {
         package_id: selectedPkg,
         start_date: memberStartDate,
+        ...(isNaN(priceVal) ? {} : { cijena: priceVal }),
       });
       Alert.alert('Uspješno', 'Članarina uspješno dodana.');
-      setMemberModal(null); setSelectedPkg(''); setMemberStartDate(new Date().toISOString().slice(0, 10));
+      setMemberModal(null); setSelectedPkg(''); setMemberPrice(''); setMemberStartDate(new Date().toISOString().slice(0, 10));
       await load();
     } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
     finally { setMemberSaving(false); }
@@ -1169,6 +1254,11 @@ function UsersSection() {
                     <View style={[s.activeBadge, !u.aktivna_clanarina && u.status !== 'active' && s.inactiveBadge]}>
                       <Text style={s.activeBadgeText}>{u.status === 'active' ? 'Aktivan' : u.status}</Text>
                     </View>
+                    {(u.minus_treninzi || 0) > 0 && (
+                      <View style={s.minusBadge}>
+                        <Text style={s.minusBadgeText}>-{u.minus_treninzi}</Text>
+                      </View>
+                    )}
                   </View>
                   <Text style={s.userSub}>{u.phone} | {u.email}</Text>
                 </View>
@@ -1191,6 +1281,10 @@ function UsersSection() {
                     <View style={s.expandedStat}><Text style={s.expandedLabel}>Ističe</Text><Text style={s.expandedValue}>{formatDD(u.datum_isteka)}</Text></View>
                     <View style={s.expandedStat}><Text style={s.expandedLabel}>Zakazani</Text><Text style={s.expandedValue}>{u.predstojeći_treninzi || 0} termina</Text></View>
                   </View>
+
+                  {(u.minus_treninzi || 0) > 0 && (
+                    <Text style={s.minusWarning}>Minus termini: {u.minus_treninzi}</Text>
+                  )}
 
                   {u.aktivna_clanarina && (
                     <View style={s.editDateRow}>
@@ -1235,6 +1329,9 @@ function UsersSection() {
                     <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#6366F1' }]}
                       onPress={() => { setPastTrainingModal(u); setPastTrainingDate(new Date().toISOString().slice(0, 10)); setPastTrainingTime(''); }}>
                       <Feather name="plus-square" size={14} color="#FFF" /><Text style={s.actionBtnText}>Prošli trening</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#8B5CF6' }]} onPress={() => openHistPkgModal(u)}>
+                      <Feather name="archive" size={14} color="#FFF" /><Text style={s.actionBtnText}>Dodaj istorijski paket</Text>
                     </TouchableOpacity>
                   </ScrollView>
                 </View>
@@ -1337,6 +1434,9 @@ function UsersSection() {
             <Text style={[s.expandedLabel, { marginTop: 12 }]}>Datum početka paketa (YYYY-MM-DD)</Text>
             <TextInput style={s.modalInput} placeholder="2026-04-13" placeholderTextColor={Colors.muted}
               value={memberStartDate} onChangeText={setMemberStartDate} keyboardType="numbers-and-punctuation" />
+            <Text style={s.expandedLabel}>Cijena (KM)</Text>
+            <TextInput style={s.modalInput} placeholder="0" placeholderTextColor={Colors.muted}
+              value={memberPrice} onChangeText={setMemberPrice} keyboardType="numeric" />
             <Text style={s.expandedLabel}>Odaberi paket</Text>
             <View style={s.pkgList}>
               {packages.map((p: any) => {
@@ -1352,7 +1452,7 @@ function UsersSection() {
               })}
             </View>
             <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalBtnCancel} onPress={() => { setMemberModal(null); setSelectedPkg(''); setMemberStartDate(new Date().toISOString().slice(0, 10)); }}>
+              <TouchableOpacity style={s.modalBtnCancel} onPress={() => { setMemberModal(null); setSelectedPkg(''); setMemberPrice(''); setMemberStartDate(new Date().toISOString().slice(0, 10)); }}>
                 <Text style={s.modalBtnCancelText}>Odustani</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[s.modalBtnConfirm, (!selectedPkg || memberSaving) && { opacity: 0.5 }]} onPress={addMembership} disabled={!selectedPkg || memberSaving}>
@@ -1485,6 +1585,47 @@ function UsersSection() {
                   ? <ActivityIndicator color={Colors.white} size="small" />
                   : <Text style={s.modalBtnConfirmText}>Sačuvaj</Text>
                 }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Historical Membership Modal (Task 3) */}
+      <Modal visible={!!histPkgModal} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Dodaj istorijski paket</Text>
+              <TouchableOpacity onPress={() => setHistPkgModal(null)}>
+                <Feather name="x" size={22} color={Colors.foreground} />
+              </TouchableOpacity>
+            </View>
+            <Text style={s.userSub}>Korisnik: {histPkgModal?.name}</Text>
+            <Text style={[s.expandedLabel, { marginTop: 16 }]}>Naziv paketa</Text>
+            <TextInput style={s.modalInput} placeholder="npr. Mjesečni paket" placeholderTextColor={Colors.muted}
+              value={histPkgName} onChangeText={setHistPkgName} />
+            <Text style={s.expandedLabel}>Cijena (KM)</Text>
+            <TextInput style={s.modalInput} placeholder="0" placeholderTextColor={Colors.muted}
+              value={histPkgPrice} onChangeText={setHistPkgPrice} keyboardType="numeric" />
+            <Text style={s.expandedLabel}>Datum početka (YYYY-MM-DD)</Text>
+            <TextInput style={s.modalInput} placeholder="2026-04-13" placeholderTextColor={Colors.muted}
+              value={histPkgDate} onChangeText={setHistPkgDate} keyboardType="numbers-and-punctuation" />
+            <Text style={s.expandedLabel}>Ukupno termina</Text>
+            <TextInput style={s.modalInput} placeholder="0" placeholderTextColor={Colors.muted}
+              value={histPkgTotal} onChangeText={setHistPkgTotal} keyboardType="numeric" />
+            <Text style={s.expandedLabel}>Iskorišteno termina</Text>
+            <TextInput style={s.modalInput} placeholder="0" placeholderTextColor={Colors.muted}
+              value={histPkgUsed} onChangeText={setHistPkgUsed} keyboardType="numeric" />
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalBtnCancel} onPress={() => setHistPkgModal(null)}>
+                <Text style={s.modalBtnCancelText}>Odustani</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.modalBtnConfirm, histPkgSaving && { opacity: 0.5 }]}
+                onPress={addHistoricalMembership} disabled={histPkgSaving}>
+                {histPkgSaving
+                  ? <ActivityIndicator color={Colors.white} size="small" />
+                  : <Text style={s.modalBtnConfirmText}>Sačuvaj</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -1697,6 +1838,9 @@ const s = StyleSheet.create({
   activeBadge: { backgroundColor: '#05966920', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   inactiveBadge: { backgroundColor: '#88888820' },
   activeBadgeText: { fontFamily: Fonts.bodySemiBold, fontSize: 10, color: '#059669' },
+  minusBadge: { backgroundColor: Colors.danger, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
+  minusBadgeText: { fontFamily: Fonts.bodyBold, fontSize: 10, color: Colors.white },
+  minusWarning: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.small, color: Colors.danger, marginBottom: 12 },
   userRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   userDate: { fontFamily: Fonts.body, fontSize: Sizes.tiny, color: Colors.muted },
   // Expanded user
@@ -1769,6 +1913,7 @@ const s = StyleSheet.create({
   changeText: { fontFamily: Fonts.bodySemiBold, fontSize: 12 },
   detailLabel: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginTop: 4 },
   detailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  payRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   // Bar chart
   barRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
   barLabel: { fontFamily: Fonts.bodySemiBold, fontSize: 12, color: Colors.foreground, width: 55 },
