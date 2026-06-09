@@ -409,6 +409,31 @@ const MONTH_NAMES: Record<string, string> = {
   '07': 'Juli', '08': 'August', '09': 'Septembar', '10': 'Oktobar', '11': 'Novembar', '12': 'Decembar',
 };
 
+// Only show months from April 2026 onwards (newest first). The backend filters via
+// ?from=2026-04, but we guard client-side in case it returns extra months.
+const FINANCE_FROM = '2026-04';
+
+// Normalize any of the several finance response shapes the backend may return
+// — { mjesecni_prihod: [...] }, { months: [...] }, { data: [...] }, or a bare
+// array — into a sorted, filtered list of months. Tolerant of per-month field
+// name variations. Shared between the loader (to decide on the fallback) and
+// the renderer so both agree on whether there is any data.
+function deriveFinanceMonths(finance: any): any[] {
+  const rawMonths: any[] = Array.isArray(finance)
+    ? finance
+    : (finance?.mjesecni_prihod || finance?.months || finance?.monthly || finance?.data || finance?.prihodi || []);
+  return (Array.isArray(rawMonths) ? rawMonths : [])
+    .map((m: any) => ({
+      ...m,
+      month: m.month || m.mjesec || m.period || m.datum || '',
+      revenue: m.revenue ?? m.prihod ?? m.ukupan_prihod ?? m.ukupno ?? m.total ?? 0,
+      pkg_revenue: m.pkg_revenue ?? m.package_revenue ?? m.paketi_prihod ?? m.paketi ?? 0,
+      manual_revenue: m.manual_revenue ?? m.rucni_prihod ?? m.manual ?? 0,
+    }))
+    .filter((m: any) => m && m.month && String(m.month) >= FINANCE_FROM)
+    .sort((a: any, b: any) => String(b.month).localeCompare(String(a.month)));
+}
+
 function FinanceSection() {
   const [finance, setFinance] = useState<any>(null);
   const [slotAnalytics, setSlotAnalytics] = useState<any>(null);
@@ -434,9 +459,25 @@ function FinanceSection() {
       ]);
       if (f.status === 'fulfilled') {
         console.log('[Finance] /financial-by-start-date response:', JSON.stringify(f.value));
-        setFinance(f.value);
+        let financeData = f.value;
+        // If the new endpoint returns nothing usable, fall back to the old
+        // /api/admin/financial endpoint and use it only if it has data.
+        if (deriveFinanceMonths(financeData).length === 0) {
+          console.log('[Finance] new endpoint returned no months — falling back to /api/admin/financial');
+          try {
+            const old = await api.get('/api/admin/financial');
+            console.log('[Finance] /financial fallback response:', JSON.stringify(old));
+            if (deriveFinanceMonths(old).length > 0) financeData = old;
+          } catch (e) { console.log('[Finance] fallback /financial failed:', e); }
+        }
+        setFinance(financeData);
       } else {
-        console.log('[Finance] request failed:', f.reason);
+        console.log('[Finance] request failed:', f.reason, '— trying /api/admin/financial fallback');
+        try {
+          const old = await api.get('/api/admin/financial');
+          console.log('[Finance] /financial fallback response:', JSON.stringify(old));
+          setFinance(old);
+        } catch (e) { console.log('[Finance] fallback /financial failed:', e); }
       }
       if (sa.status === 'fulfilled') setSlotAnalytics(sa.value);
       if (ca.status === 'fulfilled') setClientAnalytics(ca.value);
@@ -460,24 +501,8 @@ function FinanceSection() {
 
   if (loading) return <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
-  // Only show months from April 2026 onwards (newest first). The backend filters via
-  // ?from=2026-04, but we guard client-side in case it returns extra months.
-  const FINANCE_FROM = '2026-04';
-  // Tolerate several response shapes: { mjesecni_prihod: [...] }, { months: [...] },
-  // { data: [...] }, or a bare array — and several per-month field names.
-  const rawMonths: any[] = Array.isArray(finance)
-    ? finance
-    : (finance?.mjesecni_prihod || finance?.months || finance?.monthly || finance?.data || finance?.prihodi || []);
-  const months = (Array.isArray(rawMonths) ? rawMonths : [])
-    .map((m: any) => ({
-      ...m,
-      month: m.month || m.mjesec || m.period || m.datum || '',
-      revenue: m.revenue ?? m.prihod ?? m.ukupan_prihod ?? m.ukupno ?? m.total ?? 0,
-      pkg_revenue: m.pkg_revenue ?? m.package_revenue ?? m.paketi_prihod ?? m.paketi ?? 0,
-      manual_revenue: m.manual_revenue ?? m.rucni_prihod ?? m.manual ?? 0,
-    }))
-    .filter((m: any) => m && m.month && String(m.month) >= FINANCE_FROM)
-    .sort((a: any, b: any) => String(b.month).localeCompare(String(a.month)));
+  // Tolerant parsing/sorting/filtering of the finance response (shared with the loader).
+  const months = deriveFinanceMonths(finance);
 
   return (
     <ScrollView style={s.flex} contentContainerStyle={s.content}
@@ -1075,15 +1100,24 @@ function UsersSection() {
   const loadHistory = async (u: any) => {
     setHistoryModal(u);
     setHistoryData(null);
+    // Prefer the richer full-history endpoint; fall back to membership-history.
+    let data: any = null;
     try {
-      const data = await api.get(`/api/admin/users/${u.user_id}/membership-history`);
-      const list = Array.isArray(data) ? data : (data?.memberships || data?.history || []);
-      const trainings = data?.trainings || data?.historical_trainings || data?.treninzi || data?.training_history || [];
-      setHistoryData({
-        memberships: Array.isArray(list) ? list : [],
-        trainings: Array.isArray(trainings) ? trainings : [],
-      });
-    } catch (e) { setHistoryData({ memberships: [], trainings: [] }); }
+      data = await api.get(`/api/admin/users/${u.user_id}/full-history`);
+    } catch (e) {
+      try { data = await api.get(`/api/admin/users/${u.user_id}/membership-history`); }
+      catch (e2) { data = null; }
+    }
+    if (!data) { setHistoryData({ memberships: [], trainings: [] }); return; }
+    const list = Array.isArray(data)
+      ? data
+      : (data?.memberships || data?.uplate || data?.payments || data?.clanarine || data?.history || []);
+    const trainings = data?.trainings || data?.termini || data?.historical_trainings
+      || data?.treninzi || data?.training_history || data?.all_trainings || [];
+    setHistoryData({
+      memberships: Array.isArray(list) ? list : [],
+      trainings: Array.isArray(trainings) ? trainings : [],
+    });
   };
 
   // Bug 7 — delete a historical membership / training record from the Istorija modal
@@ -1111,6 +1145,23 @@ function UsersSection() {
           await loadHistory(historyModal);
           await load();
         } catch (e: any) { Alert.alert('Greška', e?.message || 'Greška pri brisanju'); }
+      }},
+    ]);
+  };
+
+  // Cancel a future scheduled training from the Istorija modal. Unlike a
+  // historical record (which is deleted), a real upcoming booking is cancelled
+  // through the admin cancel endpoint so the session is refunded by the backend.
+  const cancelScheduledTraining = (trainingId: string) => {
+    if (!historyModal || !trainingId) { Alert.alert('Greška', 'Trening nije moguće identifikovati'); return; }
+    Alert.alert('Otkaži trening', 'Da li ste sigurni da želite otkazati ovaj trening?', [
+      { text: 'Ne', style: 'cancel' },
+      { text: 'Da, otkaži', style: 'destructive', onPress: async () => {
+        try {
+          await api.post(`/api/admin/trainings/${trainingId}/cancel`, { reason: 'admin' });
+          await loadHistory(historyModal);
+          await load();
+        } catch (e: any) { Alert.alert('Greška', e?.message || 'Greška pri otkazivanju'); }
       }},
     ]);
   };
@@ -1556,89 +1607,112 @@ function UsersSection() {
             </View>
             {historyData ? (
               (() => {
-                const memberships = [...(historyData.memberships || [])].sort((a: any, b: any) => {
+                const now = Date.now();
+                // === Uplate (payments / memberships), newest first ===
+                const payments = [...(historyData.memberships || [])].sort((a: any, b: any) => {
                   const da = a.start_date || a.datum_pocetka || a.datum_aktivacije || a.created_at || '';
                   const db = b.start_date || b.datum_pocetka || b.datum_aktivacije || b.created_at || '';
                   return String(db).localeCompare(String(da));
                 });
+                const totalPaid = payments.reduce((sum: number, m: any) =>
+                  sum + (Number(m.cijena ?? m.price ?? m.amount ?? m.iznos ?? 0) || 0), 0);
+
+                // === Termini (trainings), newest first ===
                 const trainings = [...(historyData.trainings || [])].sort((a: any, b: any) => {
                   const da = `${a.datum || a.date || ''} ${a.vrijeme || a.time || ''}`;
                   const db = `${b.datum || b.date || ''} ${b.vrijeme || b.time || ''}`;
                   return String(db).localeCompare(String(da));
                 });
-                const today = new Date().toISOString().slice(0, 10);
+
                 return (
-                  <ScrollView style={{ maxHeight: 440 }}>
-                    <Text style={s.histSection}>Članarine</Text>
-                    {memberships.length === 0 ? (
-                      <Text style={s.emptyText}>Nema članarina</Text>
-                    ) : memberships.map((m: any, i: number) => {
+                  <ScrollView style={{ maxHeight: 460 }}>
+                    {/* ---- UPLATE ---- */}
+                    <View style={s.histSectionHeader}>
+                      <Text style={[s.histSection, { marginTop: 0, marginBottom: 0 }]}>Uplate</Text>
+                      <TouchableOpacity testID="new-payment-btn" style={s.goldBtn}
+                        onPress={() => { const u = historyModal; setHistoryModal(null); setHistoryData(null); setMemberModal(u); }}>
+                        <Feather name="plus" size={14} color={Colors.white} />
+                        <Text style={s.goldBtnText}>Nova uplata</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {payments.length === 0 ? (
+                      <Text style={s.emptyText}>Nema uplata</Text>
+                    ) : payments.map((m: any, i: number) => {
                       const pkgName = m.package_name || m.naziv_paketa || m.naziv || m.name || m.paket || 'Članarina';
                       const startDate = m.start_date || m.datum_pocetka || m.datum_aktivacije || m.created_at;
-                      const endDate = m.end_date || m.datum_isteka || m.expires_at;
+                      const price = Number(m.cijena ?? m.price ?? m.amount ?? m.iznos ?? 0) || 0;
                       const total = m.sessions ?? m.ukupni_termini ?? m.total_sessions ?? m.termini ?? 0;
-                      const remaining = m.preostali_termini ?? m.remaining_sessions;
-                      const used = m.sessions_used ?? m.iskorišteni_termini ?? m.iskoristeni_termini ??
-                        (remaining != null ? Math.max(total - remaining, 0) : undefined);
-                      const rawStatus = (m.status || '').toString().toLowerCase();
-                      const isActive = m.is_active ?? m.aktivna ??
-                        (rawStatus ? (rawStatus.includes('aktiv') || rawStatus === 'active')
-                          : (endDate ? String(endDate) >= today : false));
                       const mid = m.id || m._id || m.membership_id || m.clanarina_id || '';
                       return (
-                        <View key={mid || i} style={s.histRow}>
-                          <View style={s.histReqRow}>
-                            <Text style={s.userName}>{pkgName}</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                              <View style={[s.statusBadge, { backgroundColor: isActive ? '#05966920' : '#88888820' }]}>
-                                <Text style={[s.statusText, { color: isActive ? '#059669' : Colors.muted }]}>
-                                  {isActive ? 'Aktivna' : 'Istekla'}
-                                </Text>
-                              </View>
-                              {mid ? (
-                                <TouchableOpacity testID={`delete-hist-membership-${mid}`} onPress={() => deleteHistoricalMembership(String(mid))}
-                                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                                  <Feather name="trash-2" size={16} color={Colors.danger} />
-                                </TouchableOpacity>
-                              ) : null}
-                            </View>
+                        <View key={mid || i} style={s.histPayRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={s.userName}>{formatDD(startDate)} — {pkgName}</Text>
+                            <Text style={[s.userSub, { color: Colors.primary, fontFamily: Fonts.bodySemiBold }]}>
+                              {price} KM ({total} treninga)
+                            </Text>
                           </View>
-                          <Text style={s.userSub}>
-                            {formatDD(startDate)}{endDate ? ` — ${formatDD(endDate)}` : ''}
-                          </Text>
-                          <Text style={[s.userSub, { color: Colors.primary, fontFamily: Fonts.bodySemiBold }]}>
-                            Termini: {used != null ? used : '?'}/{total}
-                          </Text>
+                          {mid ? (
+                            <TouchableOpacity testID={`delete-hist-membership-${mid}`} onPress={() => deleteHistoricalMembership(String(mid))}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                              <Feather name="x" size={18} color={Colors.danger} />
+                            </TouchableOpacity>
+                          ) : null}
                         </View>
                       );
                     })}
-
-                    {trainings.length > 0 && (
-                      <>
-                        <Text style={s.histSection}>Treninzi</Text>
-                        {trainings.map((t: any, i: number) => {
-                          const ttid = t.id || t._id || t.training_id || '';
-                          const tDate = t.datum || t.date;
-                          const tTime = t.vrijeme || t.time;
-                          return (
-                            <View key={ttid || i} style={s.histRow}>
-                              <View style={s.histReqRow}>
-                                <View style={{ flex: 1 }}>
-                                  <Text style={s.userName}>{tDate ? formatDD(tDate) : '-'}</Text>
-                                  <Text style={s.userSub}>{tTime || '-'}{t.historical ? ' • Istorijski' : ''}</Text>
-                                </View>
-                                {ttid ? (
-                                  <TouchableOpacity testID={`delete-hist-training-${ttid}`} onPress={() => deleteHistoricalTraining(String(ttid))}
-                                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                                    <Feather name="trash-2" size={16} color={Colors.danger} />
-                                  </TouchableOpacity>
-                                ) : null}
-                              </View>
-                            </View>
-                          );
-                        })}
-                      </>
+                    {payments.length > 0 && (
+                      <View style={s.histTotalRow}>
+                        <Text style={s.histTotalText}>Ukupno: {totalPaid} KM</Text>
+                      </View>
                     )}
+
+                    {/* ---- TERMINI ---- */}
+                    <Text style={s.histSection}>Termini</Text>
+                    {trainings.length === 0 ? (
+                      <Text style={s.emptyText}>Nema termina</Text>
+                    ) : trainings.map((t: any, i: number) => {
+                      const ttid = t.id || t._id || t.training_id || '';
+                      const tDate = t.datum || t.date;
+                      const tTime = t.vrijeme || t.time;
+                      const rawStatus = (t.status || t.tip || '').toString().toLowerCase();
+                      const isProbni = t.probni === true || rawStatus.includes('probn') || rawStatus.includes('trial');
+                      const isCancelled = rawStatus.includes('otkazan') || rawStatus === 'cancelled';
+                      const isHistorical = t.historical === true || rawStatus.includes('istorij');
+                      const dt = toDateTime(tDate, tTime);
+                      const isFuture = dt ? dt.getTime() > now : false;
+                      // Status priority: otkazan → probni → zakazan (future) → iskorišten/završen (past)
+                      const isScheduled = !isCancelled && !isProbni && isFuture;
+                      // Delete only for historical records and future scheduled trainings.
+                      const canDelete = !!ttid && (isHistorical || isScheduled);
+                      return (
+                        <View key={ttid || i} style={s.histTrainRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[s.userName, isCancelled && s.histCancelledText]}>
+                              {tDate ? formatDD(tDate) : '-'}{tTime ? ` • ${tTime}` : ''}
+                            </Text>
+                            {t.historical ? <Text style={s.userSub}>Istorijski</Text> : null}
+                          </View>
+                          {isCancelled ? (
+                            <Text style={[s.userSub, s.histCancelledText]}>Otkazan</Text>
+                          ) : isProbni ? (
+                            <View style={s.probniBadge}><Text style={s.probniBadgeText}>P</Text></View>
+                          ) : isScheduled ? (
+                            <Text style={s.zakazanText}>zakazan</Text>
+                          ) : (
+                            <Feather name="check" size={18} color="#059669" />
+                          )}
+                          {canDelete ? (
+                            <TouchableOpacity
+                              testID={`delete-hist-training-${ttid}`}
+                              style={{ marginLeft: 10 }}
+                              onPress={() => isScheduled ? cancelScheduledTraining(String(ttid)) : deleteHistoricalTraining(String(ttid))}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                              <Feather name="x" size={18} color={Colors.danger} />
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+                      );
+                    })}
                   </ScrollView>
                 );
               })()
@@ -2141,6 +2215,15 @@ const s = StyleSheet.create({
   histSection: { fontFamily: Fonts.bodySemiBold, fontSize: 12, color: Colors.muted, marginTop: 16, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
   histRow: { paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   histReqRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  histSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 8 },
+  histPayRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  histTotalRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingVertical: 10, marginBottom: 4 },
+  histTotalText: { fontFamily: Fonts.bodyBold, fontSize: Sizes.body, color: Colors.primary },
+  histTrainRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  histCancelledText: { color: Colors.muted, textDecorationLine: 'line-through' },
+  probniBadge: { backgroundColor: '#EC489920', borderRadius: 6, width: 22, height: 22, justifyContent: 'center', alignItems: 'center' },
+  probniBadgeText: { fontFamily: Fonts.bodyBold, fontSize: 12, color: '#EC4899' },
+  zakazanText: { fontFamily: Fonts.bodySemiBold, fontSize: 12, color: Colors.primary },
   scheduledRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   // Packages
   pkgList: { gap: 6, marginVertical: 12 },
