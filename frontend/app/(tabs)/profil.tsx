@@ -269,7 +269,7 @@ export default function ProfilScreen() {
           <TouchableOpacity
             testID="menu-settings"
             style={styles.menuItem}
-            onPress={() => Alert.alert('Uskoro', 'Uskoro dostupno')}
+            onPress={() => router.push('/postavke')}
           >
             <View style={styles.menuIconWrap}>
               <Feather name="settings" size={18} color={Colors.primary} />

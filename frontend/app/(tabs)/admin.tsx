@@ -74,6 +74,7 @@ function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) 
   const [reminders, setReminders] = useState<any[]>([]);
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [cancelRequests, setCancelRequests] = useState<any[]>([]);
   const [todayBookings, setTodayBookings] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,12 +85,13 @@ function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) 
 
   const load = useCallback(async () => {
     try {
-      const [st, rem, usr, reqs, bk] = await Promise.allSettled([
+      const [st, rem, usr, reqs, bk, cancelReqs] = await Promise.allSettled([
         api.get('/api/admin/stats'),
         api.get('/api/admin/reminders'),
         api.get('/api/admin/users'),
         api.get('/api/admin/package-requests'),
         api.get('/api/admin/bookings'),
+        api.get('/api/admin/cancellation-requests'),
       ]);
       if (st.status === 'fulfilled') setStats(st.value);
       if (rem.status === 'fulfilled') setReminders(Array.isArray(rem.value) ? rem.value : []);
@@ -105,9 +107,20 @@ function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) 
       if (bk.status === 'fulfilled') {
         const all = Array.isArray(bk.value) ? bk.value : [];
         const today = new Date().toISOString().slice(0, 10);
-        const todayBk = all.filter((b: any) => (b.datum || b.date) === today && (b.tip || b.status || '') !== 'otkazani')
-          .sort((a: any, b: any) => (a.vrijeme || a.time || '').localeCompare(b.vrijeme || b.time || ''));
+        // Exclude cancelled trainings (status/tip "otkazan*"/"cancelled"), Bug 4
+        const todayBk = all.filter((b: any) => {
+          const st = (b.tip || b.status || '').toString().toLowerCase();
+          return (b.datum || b.date) === today && !st.includes('otkazan') && st !== 'cancelled';
+        }).sort((a: any, b: any) => (a.vrijeme || a.time || '').localeCompare(b.vrijeme || b.time || ''));
         setTodayBookings(todayBk);
+      }
+      if (cancelReqs.status === 'fulfilled') {
+        const all = Array.isArray(cancelReqs.value) ? cancelReqs.value : (cancelReqs.value?.requests || []);
+        const pending = (Array.isArray(all) ? all : []).filter((r: any) => {
+          const st = (r.status || '').toString().toLowerCase();
+          return !st || st === 'pending' || st === 'na_cekanju';
+        });
+        setCancelRequests(pending);
       }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
@@ -227,6 +240,28 @@ function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) 
     ]);
   };
 
+  // Bug 6 — approve/reject a user's cancellation request
+  const approveCancelRequest = async (id: string) => {
+    try {
+      await api.post(`/api/admin/cancellation-requests/${id}/approve`);
+      Alert.alert('Uspješno', 'Zahtjev odobren. Trening je otkazan.');
+      await load();
+    } catch (e: any) { Alert.alert('Greška', e?.message || 'Greška pri odobravanju zahtjeva'); }
+  };
+
+  const rejectCancelRequest = async (id: string) => {
+    Alert.alert('Odbij zahtjev', 'Da li ste sigurni?', [
+      { text: 'Ne', style: 'cancel' },
+      { text: 'Da, odbij', style: 'destructive', onPress: async () => {
+        try {
+          await api.post(`/api/admin/cancellation-requests/${id}/reject`);
+          Alert.alert('Zahtjev odbijen', 'Zahtjev odbijen. Trening ostaje zakazan.');
+          await load();
+        } catch (e: any) { Alert.alert('Greška', e?.message || 'Greška pri odbijanju zahtjeva'); }
+      }},
+    ]);
+  };
+
   return (
     <ScrollView style={s.flex} contentContainerStyle={s.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}>
@@ -273,6 +308,42 @@ function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) 
               </View>
             </View>
           ))}
+        </View>
+      )}
+
+      {/* Cancellation Requests (Bug 6) */}
+      {cancelRequests.length > 0 && (
+        <View style={s.card}>
+          <View style={s.cancelReqHeader}>
+            <Text style={s.cardTitle}>Zahtjevi za otkazivanje</Text>
+            <View style={s.cancelReqBadge}>
+              <Text style={s.cancelReqBadgeText}>{cancelRequests.length}</Text>
+            </View>
+          </View>
+          {cancelRequests.map((r: any) => {
+            const rid = r.id || r._id || r.request_id;
+            const uname = r.user_name || r.korisnik_ime || r.korisnik?.name || r.name || 'Korisnik';
+            const datum = r.datum || r.date || r.training_date;
+            const vrijeme = r.vrijeme || r.time || r.training_time;
+            const requested = r.created_at || r.request_date || r.datum_zahtjeva || r.requested_at;
+            return (
+              <View key={rid} style={s.requestRow} testID={`cancel-request-${rid}`}>
+                <View style={s.requestInfo}>
+                  <Text style={s.userName}>{uname}</Text>
+                  <Text style={s.userSub}>Trening: {datum ? formatDD(datum) : '-'}{vrijeme ? ` • ${vrijeme}` : ''}</Text>
+                  {requested ? <Text style={s.userSub}>Zahtjev poslan: {formatDD(requested)}</Text> : null}
+                </View>
+                <View style={s.requestActions}>
+                  <TouchableOpacity testID={`approve-cancel-${rid}`} style={s.approveBtn} onPress={() => approveCancelRequest(rid)}>
+                    <Feather name="check" size={16} color={Colors.white} />
+                  </TouchableOpacity>
+                  <TouchableOpacity testID={`reject-cancel-${rid}`} style={s.rejectBtn} onPress={() => rejectCancelRequest(rid)}>
+                    <Feather name="x" size={16} color={Colors.white} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -361,7 +432,12 @@ function FinanceSection() {
         api.get('/api/admin/analytics/clients'),
         api.get('/api/admin/warnings'),
       ]);
-      if (f.status === 'fulfilled') setFinance(f.value);
+      if (f.status === 'fulfilled') {
+        console.log('[Finance] /financial-by-start-date response:', JSON.stringify(f.value));
+        setFinance(f.value);
+      } else {
+        console.log('[Finance] request failed:', f.reason);
+      }
       if (sa.status === 'fulfilled') setSlotAnalytics(sa.value);
       if (ca.status === 'fulfilled') setClientAnalytics(ca.value);
       if (w.status === 'fulfilled') setWarnings(Array.isArray(w.value) ? w.value : []);
@@ -387,8 +463,20 @@ function FinanceSection() {
   // Only show months from April 2026 onwards (newest first). The backend filters via
   // ?from=2026-04, but we guard client-side in case it returns extra months.
   const FINANCE_FROM = '2026-04';
-  const months = (finance?.mjesecni_prihod || [])
-    .filter((m: any) => m && m.month && m.month >= FINANCE_FROM)
+  // Tolerate several response shapes: { mjesecni_prihod: [...] }, { months: [...] },
+  // { data: [...] }, or a bare array — and several per-month field names.
+  const rawMonths: any[] = Array.isArray(finance)
+    ? finance
+    : (finance?.mjesecni_prihod || finance?.months || finance?.monthly || finance?.data || finance?.prihodi || []);
+  const months = (Array.isArray(rawMonths) ? rawMonths : [])
+    .map((m: any) => ({
+      ...m,
+      month: m.month || m.mjesec || m.period || m.datum || '',
+      revenue: m.revenue ?? m.prihod ?? m.ukupan_prihod ?? m.ukupno ?? m.total ?? 0,
+      pkg_revenue: m.pkg_revenue ?? m.package_revenue ?? m.paketi_prihod ?? m.paketi ?? 0,
+      manual_revenue: m.manual_revenue ?? m.rucni_prihod ?? m.manual ?? 0,
+    }))
+    .filter((m: any) => m && m.month && String(m.month) >= FINANCE_FROM)
     .sort((a: any, b: any) => String(b.month).localeCompare(String(a.month)));
 
   return (
@@ -990,8 +1078,41 @@ function UsersSection() {
     try {
       const data = await api.get(`/api/admin/users/${u.user_id}/membership-history`);
       const list = Array.isArray(data) ? data : (data?.memberships || data?.history || []);
-      setHistoryData({ memberships: Array.isArray(list) ? list : [] });
-    } catch (e) { setHistoryData({ memberships: [] }); }
+      const trainings = data?.trainings || data?.historical_trainings || data?.treninzi || data?.training_history || [];
+      setHistoryData({
+        memberships: Array.isArray(list) ? list : [],
+        trainings: Array.isArray(trainings) ? trainings : [],
+      });
+    } catch (e) { setHistoryData({ memberships: [], trainings: [] }); }
+  };
+
+  // Bug 7 — delete a historical membership / training record from the Istorija modal
+  const deleteHistoricalMembership = (membershipId: string) => {
+    if (!historyModal || !membershipId) { Alert.alert('Greška', 'Zapis nije moguće identifikovati'); return; }
+    Alert.alert('Brisanje zapisa', 'Da li ste sigurni da želite obrisati ovaj zapis?', [
+      { text: 'Ne', style: 'cancel' },
+      { text: 'Da, obriši', style: 'destructive', onPress: async () => {
+        try {
+          await api.delete(`/api/admin/users/${historyModal.user_id}/historical-memberships/${membershipId}`);
+          await loadHistory(historyModal);
+          await load();
+        } catch (e: any) { Alert.alert('Greška', e?.message || 'Greška pri brisanju'); }
+      }},
+    ]);
+  };
+
+  const deleteHistoricalTraining = (trainingId: string) => {
+    if (!historyModal || !trainingId) { Alert.alert('Greška', 'Zapis nije moguće identifikovati'); return; }
+    Alert.alert('Brisanje zapisa', 'Da li ste sigurni da želite obrisati ovaj zapis?', [
+      { text: 'Ne', style: 'cancel' },
+      { text: 'Da, obriši', style: 'destructive', onPress: async () => {
+        try {
+          await api.delete(`/api/admin/users/${historyModal.user_id}/historical-trainings/${trainingId}`);
+          await loadHistory(historyModal);
+          await load();
+        } catch (e: any) { Alert.alert('Greška', e?.message || 'Greška pri brisanju'); }
+      }},
+    ]);
   };
 
   // Task 4 — list a user's scheduled (upcoming) trainings. We derive them from
@@ -1335,7 +1456,7 @@ function UsersSection() {
                     <TouchableOpacity style={s.expandedStat} onPress={() => openScheduled(u)} testID={`scheduled-stat-${u.user_id}`}>
                       <Text style={s.expandedLabel}>Zakazani</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Text style={[s.expandedValue, { color: Colors.primary }]}>{u.predstojeći_treninzi || 0} termina</Text>
+                        <Text style={[s.expandedValue, { color: Colors.primary }]}>{Math.max(0, Number(u.predstojeći_treninzi) || 0)} termina</Text>
                         <Feather name="chevron-right" size={14} color={Colors.primary} />
                       </View>
                     </TouchableOpacity>
@@ -1440,9 +1561,15 @@ function UsersSection() {
                   const db = b.start_date || b.datum_pocetka || b.datum_aktivacije || b.created_at || '';
                   return String(db).localeCompare(String(da));
                 });
+                const trainings = [...(historyData.trainings || [])].sort((a: any, b: any) => {
+                  const da = `${a.datum || a.date || ''} ${a.vrijeme || a.time || ''}`;
+                  const db = `${b.datum || b.date || ''} ${b.vrijeme || b.time || ''}`;
+                  return String(db).localeCompare(String(da));
+                });
                 const today = new Date().toISOString().slice(0, 10);
                 return (
                   <ScrollView style={{ maxHeight: 440 }}>
+                    <Text style={s.histSection}>Članarine</Text>
                     {memberships.length === 0 ? (
                       <Text style={s.emptyText}>Nema članarina</Text>
                     ) : memberships.map((m: any, i: number) => {
@@ -1457,14 +1584,23 @@ function UsersSection() {
                       const isActive = m.is_active ?? m.aktivna ??
                         (rawStatus ? (rawStatus.includes('aktiv') || rawStatus === 'active')
                           : (endDate ? String(endDate) >= today : false));
+                      const mid = m.id || m._id || m.membership_id || m.clanarina_id || '';
                       return (
-                        <View key={i} style={s.histRow}>
+                        <View key={mid || i} style={s.histRow}>
                           <View style={s.histReqRow}>
                             <Text style={s.userName}>{pkgName}</Text>
-                            <View style={[s.statusBadge, { backgroundColor: isActive ? '#05966920' : '#88888820' }]}>
-                              <Text style={[s.statusText, { color: isActive ? '#059669' : Colors.muted }]}>
-                                {isActive ? 'Aktivna' : 'Istekla'}
-                              </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                              <View style={[s.statusBadge, { backgroundColor: isActive ? '#05966920' : '#88888820' }]}>
+                                <Text style={[s.statusText, { color: isActive ? '#059669' : Colors.muted }]}>
+                                  {isActive ? 'Aktivna' : 'Istekla'}
+                                </Text>
+                              </View>
+                              {mid ? (
+                                <TouchableOpacity testID={`delete-hist-membership-${mid}`} onPress={() => deleteHistoricalMembership(String(mid))}
+                                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                                  <Feather name="trash-2" size={16} color={Colors.danger} />
+                                </TouchableOpacity>
+                              ) : null}
                             </View>
                           </View>
                           <Text style={s.userSub}>
@@ -1476,6 +1612,33 @@ function UsersSection() {
                         </View>
                       );
                     })}
+
+                    {trainings.length > 0 && (
+                      <>
+                        <Text style={s.histSection}>Treninzi</Text>
+                        {trainings.map((t: any, i: number) => {
+                          const ttid = t.id || t._id || t.training_id || '';
+                          const tDate = t.datum || t.date;
+                          const tTime = t.vrijeme || t.time;
+                          return (
+                            <View key={ttid || i} style={s.histRow}>
+                              <View style={s.histReqRow}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={s.userName}>{tDate ? formatDD(tDate) : '-'}</Text>
+                                  <Text style={s.userSub}>{tTime || '-'}{t.historical ? ' • Istorijski' : ''}</Text>
+                                </View>
+                                {ttid ? (
+                                  <TouchableOpacity testID={`delete-hist-training-${ttid}`} onPress={() => deleteHistoricalTraining(String(ttid))}
+                                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                                    <Feather name="trash-2" size={16} color={Colors.danger} />
+                                  </TouchableOpacity>
+                                ) : null}
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </>
+                    )}
                   </ScrollView>
                 );
               })()
@@ -1995,6 +2158,9 @@ const s = StyleSheet.create({
   // Package requests
   requestRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   requestInfo: { flex: 1 },
+  cancelReqHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  cancelReqBadge: { backgroundColor: Colors.danger, borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
+  cancelReqBadgeText: { fontFamily: Fonts.bodyBold, fontSize: 11, color: Colors.white },
   requestActions: { flexDirection: 'row', gap: 8 },
   approveBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#059669', justifyContent: 'center', alignItems: 'center' },
   rejectBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.danger, justifyContent: 'center', alignItems: 'center' },

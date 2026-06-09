@@ -95,6 +95,14 @@ export const profileAPI = {
   stats: () => api.get('/api/user/stats'),
 };
 
+// User account API
+export const userAPI = {
+  updateProfile: (data: { ime?: string; prezime?: string; email?: string; phone?: string }) =>
+    api.put('/api/user/profile', data),
+  changePin: (data: { current_pin: string; new_pin: string }) =>
+    api.put('/api/user/change-pin', data),
+};
+
 // Training API
 export const trainingAPI = {
   upcoming: () => api.get('/api/trainings/upcoming'),

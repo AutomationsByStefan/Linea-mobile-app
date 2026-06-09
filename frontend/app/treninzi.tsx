@@ -6,30 +6,8 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Sizes, CardStyle, formatDateWithDay } from '../src/theme';
+import { Colors, Fonts, Sizes, CardStyle, formatDateWithDay, toDateTime } from '../src/theme';
 import { trainingAPI, api } from '../src/api';
-
-function getCancelType(datum: string, vrijeme: string, createdAt?: string): 'direct' | 'hourly' | 'admin' {
-  const now = new Date();
-  const [h, m] = (vrijeme || '00:00').split(':').map(Number);
-  const trainingDate = new Date(datum);
-  trainingDate.setHours(h, m, 0, 0);
-
-  const hoursUntil = (trainingDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-  // More than 12h away — can cancel directly
-  if (hoursUntil > 12) return 'direct';
-
-  // Same day booking — check if within 1 hour of booking
-  if (createdAt) {
-    const bookingTime = new Date(createdAt);
-    const hoursSinceBooking = (now.getTime() - bookingTime.getTime()) / (1000 * 60 * 60);
-    if (hoursSinceBooking < 1) return 'hourly';
-  }
-
-  // Otherwise — need admin approval
-  return 'admin';
-}
 
 export default function TreninziScreen() {
   const router = useRouter();
@@ -89,28 +67,37 @@ export default function TreninziScreen() {
 
   const handleCancel = async (training: any) => {
     const tid = training.id || training._id || training.training_id;
+    if (!tid) {
+      Alert.alert('Greška', 'Trening nije moguće identifikovati.');
+      return;
+    }
     const datum = training.datum || training.date;
     const vrijeme = training.vrijeme || training.time;
-    const createdAt = training.created_at;
-    const cancelType = getCancelType(datum, vrijeme, createdAt);
 
-    if (cancelType === 'direct' || cancelType === 'hourly') {
+    // Decide based on how far away the training is. More than 12h → direct
+    // cancel; 12h or less → send a cancellation request for admin approval.
+    // An unparseable date is treated as <12h (the safer, admin-approval path).
+    const trainingDate = toDateTime(datum, vrijeme);
+    const hoursUntil = trainingDate
+      ? (trainingDate.getTime() - Date.now()) / (1000 * 60 * 60)
+      : 0;
+
+    if (hoursUntil > 12) {
+      // Direct cancellation
       Alert.alert(
         'Otkaži trening',
-        cancelType === 'direct'
-          ? 'Da li ste sigurni da želite otkazati ovaj trening?'
-          : 'Zakazali ste trening u toku dana. Možete otkazati u roku od sat vremena od zakazivanja.',
+        'Da li ste sigurni da želite otkazati ovaj trening?',
         [
           { text: 'Ne', style: 'cancel' },
           { text: 'Da, otkaži', style: 'destructive', onPress: async () => {
             setCancelling(tid);
             try {
-              await api.post(`/api/trainings/${tid}/cancel`, { type: cancelType });
+              await api.post(`/api/trainings/${tid}/cancel`);
               // Remove from local state immediately
               setUpcoming(prev => prev.filter((t: any) => (t.id || t._id || t.training_id) !== tid));
               Alert.alert('Uspješno', 'Trening je otkazan');
             } catch (e: any) {
-              Alert.alert('Greška', e.message || 'Nije moguće otkazati trening');
+              Alert.alert('Greška', e?.message || 'Nije moguće otkazati trening');
             } finally {
               setCancelling(null);
             }
@@ -118,21 +105,19 @@ export default function TreninziScreen() {
         ]
       );
     } else {
-      // Send message to admin
+      // Within 12h — send a cancellation request for admin approval
       Alert.alert(
-        'Otkazivanje nije moguće',
-        'Trening je zakazan za manje od 12 sati. Zahtjev za otkazivanje će biti poslan administratoru studija.',
+        'Zahtjev za otkazivanje',
+        'Trening je zakazan za manje od 12 sati. Želite li poslati zahtjev za otkazivanje administratoru?',
         [
           { text: 'Odustani', style: 'cancel' },
           { text: 'Pošalji zahtjev', onPress: async () => {
             setCancelling(tid);
             try {
-              await api.post(`/api/trainings/${tid}/cancel-request`, {
-                datum, vrijeme, reason: 'Korisnik zahtijeva otkazivanje',
-              });
-              Alert.alert('Poslano', 'Zahtjev za otkazivanje je poslan administratoru.');
+              await api.post(`/api/trainings/${tid}/request-cancel`);
+              Alert.alert('Zahtjev poslan', 'Zahtjev za otkazivanje je poslan. Administrator će odobriti ili odbiti vaš zahtjev.');
             } catch (e: any) {
-              Alert.alert('Greška', e.message || 'Greška pri slanju zahtjeva');
+              Alert.alert('Greška', e?.message || 'Greška pri slanju zahtjeva');
             } finally {
               setCancelling(null);
             }
@@ -194,6 +179,13 @@ export default function TreninziScreen() {
             const isCommenting = commentingId === tid;
             const isPast = tab === 'past';
             const isUpcoming = tab === 'upcoming';
+            // Status shown for past/completed trainings (Bug 10)
+            const rawStatus = (t.tip || t.status || '').toString().toLowerCase();
+            const statusLabel = t.historical
+              ? 'Istorijski'
+              : (rawStatus.includes('otkazan') || rawStatus === 'cancelled')
+                ? 'Otkazan'
+                : 'Iskorišten';
 
             return (
               <View key={tid} style={styles.card} testID={`training-${tid}`}>
@@ -211,7 +203,7 @@ export default function TreninziScreen() {
                   </View>
                   {isPast && (
                     <View style={styles.usedBadge}>
-                      <Text style={styles.usedBadgeText}>Iskorišten</Text>
+                      <Text style={styles.usedBadgeText}>{statusLabel}</Text>
                     </View>
                   )}
                 </View>
