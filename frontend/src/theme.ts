@@ -94,6 +94,17 @@ export function toDateTime(dateStr?: string | null, timeStr?: string | null): Da
   return d;
 }
 
+/**
+ * Convert a date typed in DD.MM.YYYY (or already in YYYY-MM-DD) form into the
+ * YYYY-MM-DD string the backend expects. Returns null if it can't be parsed,
+ * so callers can show an error instead of sending garbage.
+ */
+export function toISODate(dateStr?: string | null): string | null {
+  const d = parseDate(dateStr);
+  if (!d) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 /** DD.MM.YYYY format used everywhere */
 export function formatDD(dateStr: string): string {
   if (!dateStr) return '-';

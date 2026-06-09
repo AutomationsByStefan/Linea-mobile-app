@@ -5,11 +5,18 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Sizes, CardStyle, formatDD, toDateTime } from '../../src/theme';
+import { Colors, Fonts, Sizes, CardStyle, formatDD, toDateTime, toISODate } from '../../src/theme';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
 
 type Section = 'dashboard' | 'finance' | 'schedule' | 'bookings' | 'users';
+
+/** YYYY-MM-DD → DD.MM.YYYY for pre-filling date inputs (empty string if unparseable). */
+function isoToInput(iso?: string | null): string {
+  const m = String(iso || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!m) return '';
+  return `${m[3].padStart(2, '0')}.${m[2].padStart(2, '0')}.${m[1]}`;
+}
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();
@@ -349,7 +356,7 @@ function FinanceSection() {
   const load = useCallback(async () => {
     try {
       const [f, sa, ca, w] = await Promise.allSettled([
-        api.get('/api/admin/financial?from=2026-04'),
+        api.get('/api/admin/financial-by-start-date?from=2026-04'),
         api.get('/api/admin/analytics/slots'),
         api.get('/api/admin/analytics/clients'),
         api.get('/api/admin/warnings'),
@@ -905,7 +912,7 @@ function UsersSection() {
   const [memberModal, setMemberModal] = useState<any>(null);
   const [selectedPkg, setSelectedPkg] = useState('');
   const [packages, setPackages] = useState<any[]>([]);
-  const [memberStartDate, setMemberStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [memberStartDate, setMemberStartDate] = useState(isoToInput(new Date().toISOString().slice(0, 10)));
   const [memberPrice, setMemberPrice] = useState('');
   const [memberSaving, setMemberSaving] = useState(false);
   // Edit start date of an existing active membership
@@ -938,6 +945,9 @@ function UsersSection() {
   const [pastTrainingTime, setPastTrainingTime] = useState('');
   const [pastTrainingSaving, setPastTrainingSaving] = useState(false);
   const [pastTrainingHistorical, setPastTrainingHistorical] = useState(false);
+  // Scheduled trainings popup (Task 4)
+  const [scheduledModal, setScheduledModal] = useState<any>(null);
+  const [scheduledData, setScheduledData] = useState<any[] | null>(null);
   // Historical membership (Task 3)
   const [histPkgModal, setHistPkgModal] = useState<any>(null);
   const [histPkgName, setHistPkgName] = useState('');
@@ -984,6 +994,36 @@ function UsersSection() {
     } catch (e) { setHistoryData({ memberships: [] }); }
   };
 
+  // Task 4 — list a user's scheduled (upcoming) trainings. We derive them from
+  // the admin bookings list, matching by user id and keeping future, non-cancelled
+  // trainings — the same set that feeds the "Zakazani" count.
+  const openScheduled = async (u: any) => {
+    setScheduledModal(u);
+    setScheduledData(null);
+    try {
+      const data = await api.get('/api/admin/bookings');
+      const all = Array.isArray(data) ? data : [];
+      const now = new Date();
+      const mine = all.filter((b: any) => {
+        const bid = b.user_id || b.korisnik_id || b.userId;
+        if (bid && bid !== u.user_id) return false;
+        if (!bid && (b.user_email || b.email) && (b.user_email || b.email) !== u.email) return false;
+        if (!bid && !(b.user_email || b.email)) return false;
+        const st = (b.status || b.tip || '').toString().toLowerCase();
+        if (st.includes('otkazan') || st === 'cancelled') return false;
+        const dt = toDateTime(b.datum || b.date, b.vrijeme || b.time);
+        return dt ? dt.getTime() >= now.getTime() : true;
+      }).sort((a: any, b: any) => {
+        const ka = `${a.datum || a.date} ${a.vrijeme || a.time}`;
+        const kb = `${b.datum || b.date} ${b.vrijeme || b.time}`;
+        return ka.localeCompare(kb);
+      });
+      setScheduledData(mine);
+    } catch (e) {
+      setScheduledData([]);
+    }
+  };
+
   const freezeUser = async () => {
     if (!freezeModal || !freezeFrom || !freezeTo) {
       Alert.alert('Greška', 'Unesite datume zamrzavanja');
@@ -1008,18 +1048,19 @@ function UsersSection() {
 
   const addPastTraining = async () => {
     if (!pastTrainingModal) return;
-    if (!pastTrainingDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      Alert.alert('Greška', 'Unesite datum u formatu YYYY-MM-DD');
+    const dateISO = toISODate(pastTrainingDate);
+    if (!dateISO) {
+      Alert.alert('Greška', 'Unesite datum u formatu DD.MM.YYYY');
       return;
     }
-    if (!pastTrainingTime.match(/^\d{2}:\d{2}$/)) {
+    if (!pastTrainingTime.match(/^\d{1,2}:\d{2}$/)) {
       Alert.alert('Greška', 'Unesite vrijeme u formatu HH:MM');
       return;
     }
     setPastTrainingSaving(true);
     try {
       await api.post(`/api/admin/users/${pastTrainingModal.user_id}/add-past-training`, {
-        datum: pastTrainingDate,
+        datum: dateISO,
         vrijeme: pastTrainingTime,
         historical: pastTrainingHistorical,
       });
@@ -1051,8 +1092,9 @@ function UsersSection() {
       Alert.alert('Greška', 'Unesite naziv paketa');
       return;
     }
-    if (!histPkgDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      Alert.alert('Greška', 'Unesite datum u formatu YYYY-MM-DD');
+    const startISO = toISODate(histPkgDate);
+    if (!startISO) {
+      Alert.alert('Greška', 'Unesite datum u formatu DD.MM.YYYY');
       return;
     }
     const priceVal = parseFloat(histPkgPrice.replace(',', '.'));
@@ -1064,12 +1106,14 @@ function UsersSection() {
     }
     setHistPkgSaving(true);
     try {
+      // Field names must match the backend payload:
+      // { package_name, cijena, start_date, total_sessions, used_sessions }
       await api.post(`/api/admin/users/${histPkgModal.user_id}/add-historical-membership`, {
-        naziv_paketa: histPkgName.trim(),
+        package_name: histPkgName.trim(),
         cijena: isNaN(priceVal) ? 0 : priceVal,
-        datum_pocetka: histPkgDate,
-        ukupno_termina: totalVal,
-        iskoristeno_termina: isNaN(usedVal) ? 0 : usedVal,
+        start_date: startISO,
+        total_sessions: totalVal,
+        used_sessions: isNaN(usedVal) ? 0 : usedVal,
       });
       Alert.alert('Uspješno', 'Istorijski paket uspješno dodan.');
       setHistPkgModal(null);
@@ -1082,23 +1126,31 @@ function UsersSection() {
   };
 
   const addMembership = async () => {
-    if (!memberModal || !selectedPkg) return;
-    if (!memberStartDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      Alert.alert('Greška', 'Unesite datum u formatu YYYY-MM-DD');
+    if (!memberModal) { Alert.alert('Greška', 'Korisnik nije izabran'); return; }
+    if (!selectedPkg) { Alert.alert('Greška', 'Izaberite paket'); return; }
+    const startISO = toISODate(memberStartDate);
+    if (!startISO) {
+      Alert.alert('Greška', 'Unesite datum u formatu DD.MM.YYYY');
       return;
     }
+    // The number of sessions is derived by the backend from package_id — the
+    // admin never types it in. We only send the three required fields.
+    const pkg = packages.find((p: any) => (p.id || p._id || p.package_id) === selectedPkg);
+    const priceVal = parseFloat((memberPrice || '').replace(',', '.'));
+    // cijena is required by the backend — fall back to the package price, then 0.
+    const cijena = !isNaN(priceVal) ? priceVal
+      : Number(pkg?.cijena ?? pkg?.price ?? 0) || 0;
     setMemberSaving(true);
     try {
-      const priceVal = parseFloat(memberPrice.replace(',', '.'));
       await api.post(`/api/admin/users/${memberModal.user_id}/add-membership`, {
         package_id: selectedPkg,
-        start_date: memberStartDate,
-        ...(isNaN(priceVal) ? {} : { cijena: priceVal }),
+        start_date: startISO,
+        cijena,
       });
       Alert.alert('Uspješno', 'Članarina uspješno dodana.');
-      setMemberModal(null); setSelectedPkg(''); setMemberPrice(''); setMemberStartDate(new Date().toISOString().slice(0, 10));
+      setMemberModal(null); setSelectedPkg(''); setMemberPrice(''); setMemberStartDate(isoToInput(new Date().toISOString().slice(0, 10)));
       await load();
-    } catch (e: any) { Alert.alert('Greška', e.message || 'Greška'); }
+    } catch (e: any) { Alert.alert('Greška', e.message || 'Greška pri dodavanju članarine'); }
     finally { setMemberSaving(false); }
   };
 
@@ -1127,11 +1179,11 @@ function UsersSection() {
         || u.datum_pocetka || u.datum_aktivacije || '';
       const iso = String(start).slice(0, 10);
       setEditDateMembershipId(String(mid));
-      setEditDateStartDate(iso);
+      setEditDateStartDate(isoToInput(iso));
       setEditDateCurrent(iso);
     } catch (e) {
       const iso = String(u.datum_pocetka || u.datum_aktivacije || '').slice(0, 10);
-      setEditDateStartDate(iso);
+      setEditDateStartDate(isoToInput(iso));
       setEditDateCurrent(iso);
     } finally {
       setEditDateLoading(false);
@@ -1139,8 +1191,9 @@ function UsersSection() {
   };
 
   const saveStartDate = async () => {
-    if (!editDateStartDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      Alert.alert('Greška', 'Unesite datum u formatu YYYY-MM-DD');
+    const startISO = toISODate(editDateStartDate);
+    if (!startISO) {
+      Alert.alert('Greška', 'Unesite datum u formatu DD.MM.YYYY');
       return;
     }
     if (!editDateMembershipId) {
@@ -1150,7 +1203,7 @@ function UsersSection() {
     setEditDateSaving(true);
     try {
       await api.patch(`/api/admin/memberships/${editDateMembershipId}/update-start-date`, {
-        start_date: editDateStartDate,
+        start_date: startISO,
       });
       Alert.alert('Uspješno', 'Datum početka uspješno promijenjen.');
       setEditDateModal(null);
@@ -1279,7 +1332,13 @@ function UsersSection() {
                     <View style={s.expandedStat}><Text style={s.expandedLabel}>Registracija</Text><Text style={s.expandedValue}>{formatDD(u.created_at)}</Text></View>
                     <View style={s.expandedStat}><Text style={s.expandedLabel}>Aktivacija</Text><Text style={s.expandedValue}>{formatDD(u.datum_aktivacije)}</Text></View>
                     <View style={s.expandedStat}><Text style={s.expandedLabel}>Ističe</Text><Text style={s.expandedValue}>{formatDD(u.datum_isteka)}</Text></View>
-                    <View style={s.expandedStat}><Text style={s.expandedLabel}>Zakazani</Text><Text style={s.expandedValue}>{u.predstojeći_treninzi || 0} termina</Text></View>
+                    <TouchableOpacity style={s.expandedStat} onPress={() => openScheduled(u)} testID={`scheduled-stat-${u.user_id}`}>
+                      <Text style={s.expandedLabel}>Zakazani</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Text style={[s.expandedValue, { color: Colors.primary }]}>{u.predstojeći_treninzi || 0} termina</Text>
+                        <Feather name="chevron-right" size={14} color={Colors.primary} />
+                      </View>
+                    </TouchableOpacity>
                   </View>
 
                   {(u.minus_treninzi || 0) > 0 && (
@@ -1327,7 +1386,7 @@ function UsersSection() {
                       <Feather name="file-text" size={14} color={Colors.foreground} /><Text style={s.actionBtnOutlineText}>Bilješka</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#6366F1' }]}
-                      onPress={() => { setPastTrainingModal(u); setPastTrainingDate(new Date().toISOString().slice(0, 10)); setPastTrainingTime(''); }}>
+                      onPress={() => { setPastTrainingModal(u); setPastTrainingDate(isoToInput(new Date().toISOString().slice(0, 10))); setPastTrainingTime(''); }}>
                       <Feather name="plus-square" size={14} color="#FFF" /><Text style={s.actionBtnText}>Prošli trening</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#8B5CF6' }]} onPress={() => openHistPkgModal(u)}>
@@ -1425,14 +1484,56 @@ function UsersSection() {
         </View>
       </Modal>
 
+      {/* Scheduled Trainings Modal (Task 4) */}
+      <Modal visible={!!scheduledModal} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Zakazani treninzi - {scheduledModal?.name}</Text>
+              <TouchableOpacity onPress={() => { setScheduledModal(null); setScheduledData(null); }}>
+                <Feather name="x" size={22} color={Colors.foreground} />
+              </TouchableOpacity>
+            </View>
+            {scheduledData === null ? (
+              <ActivityIndicator color={Colors.primary} style={{ marginVertical: 24 }} />
+            ) : scheduledData.length === 0 ? (
+              <Text style={s.emptyText}>Nema zakazanih treninga</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 440 }}>
+                {scheduledData.map((b: any, i: number) => {
+                  const rawStatus = (b.status || b.tip || '').toString().toLowerCase();
+                  const isCancelled = rawStatus.includes('otkazan') || rawStatus === 'cancelled';
+                  const label = isCancelled ? 'Otkazan' : 'Zakazan';
+                  const color = isCancelled ? Colors.danger : '#2563EB';
+                  return (
+                    <View key={b.id || b._id || i} style={s.scheduledRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.userName}>{formatDD(b.datum || b.date)}</Text>
+                        <Text style={s.userSub}>{b.vrijeme || b.time || '-'}</Text>
+                      </View>
+                      <View style={[s.statusBadge, { backgroundColor: color + '20' }]}>
+                        <Text style={[s.statusText, { color }]}>{label}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={{ paddingVertical: 14, alignItems: 'center' }} onPress={() => { setScheduledModal(null); setScheduledData(null); }}>
+              <Text style={s.modalBtnCancelText}>Zatvori</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Add Membership Modal */}
       <Modal visible={!!memberModal} transparent animationType="fade">
         <View style={s.modalOverlay}>
           <View style={s.modalContent}>
             <Text style={s.modalTitle}>Dodaj članarinu</Text>
             <Text style={s.userSub}>Korisnik: {memberModal?.name}</Text>
-            <Text style={[s.expandedLabel, { marginTop: 12 }]}>Datum početka paketa (YYYY-MM-DD)</Text>
-            <TextInput style={s.modalInput} placeholder="2026-04-13" placeholderTextColor={Colors.muted}
+            <Text style={[s.expandedLabel, { marginTop: 12 }]}>Datum početka paketa (DD.MM.YYYY)</Text>
+            <TextInput style={s.modalInput} placeholder="DD.MM.YYYY" placeholderTextColor={Colors.muted}
               value={memberStartDate} onChangeText={setMemberStartDate} keyboardType="numbers-and-punctuation" />
             <Text style={s.expandedLabel}>Cijena (KM)</Text>
             <TextInput style={s.modalInput} placeholder="0" placeholderTextColor={Colors.muted}
@@ -1452,7 +1553,7 @@ function UsersSection() {
               })}
             </View>
             <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalBtnCancel} onPress={() => { setMemberModal(null); setSelectedPkg(''); setMemberPrice(''); setMemberStartDate(new Date().toISOString().slice(0, 10)); }}>
+              <TouchableOpacity style={s.modalBtnCancel} onPress={() => { setMemberModal(null); setSelectedPkg(''); setMemberPrice(''); setMemberStartDate(isoToInput(new Date().toISOString().slice(0, 10))); }}>
                 <Text style={s.modalBtnCancelText}>Odustani</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[s.modalBtnConfirm, (!selectedPkg || memberSaving) && { opacity: 0.5 }]} onPress={addMembership} disabled={!selectedPkg || memberSaving}>
@@ -1482,8 +1583,8 @@ function UsersSection() {
               <>
                 <Text style={[s.expandedLabel, { marginTop: 16 }]}>Trenutni datum početka</Text>
                 <Text style={[s.expandedValue, { marginBottom: 12 }]}>{editDateCurrent ? formatDD(editDateCurrent) : '-'}</Text>
-                <Text style={s.expandedLabel}>Novi datum početka (YYYY-MM-DD)</Text>
-                <TextInput style={s.modalInput} placeholder="2026-04-13" placeholderTextColor={Colors.muted}
+                <Text style={s.expandedLabel}>Novi datum početka (DD.MM.YYYY)</Text>
+                <TextInput style={s.modalInput} placeholder="DD.MM.YYYY" placeholderTextColor={Colors.muted}
                   value={editDateStartDate} onChangeText={setEditDateStartDate} keyboardType="numbers-and-punctuation" />
                 <Text style={s.userSub}>Datum isteka se automatski računa (datum početka + 35 dana).</Text>
               </>
@@ -1544,10 +1645,10 @@ function UsersSection() {
               </TouchableOpacity>
             </View>
             <Text style={s.userSub}>Korisnik: {pastTrainingModal?.name}</Text>
-            <Text style={[s.expandedLabel, { marginTop: 16 }]}>Datum treninga (YYYY-MM-DD)</Text>
+            <Text style={[s.expandedLabel, { marginTop: 16 }]}>Datum treninga (DD.MM.YYYY)</Text>
             <TextInput
               style={s.modalInput}
-              placeholder="2026-05-25"
+              placeholder="DD.MM.YYYY"
               placeholderTextColor={Colors.muted}
               value={pastTrainingDate}
               onChangeText={setPastTrainingDate}
@@ -1608,8 +1709,8 @@ function UsersSection() {
             <Text style={s.expandedLabel}>Cijena (KM)</Text>
             <TextInput style={s.modalInput} placeholder="0" placeholderTextColor={Colors.muted}
               value={histPkgPrice} onChangeText={setHistPkgPrice} keyboardType="numeric" />
-            <Text style={s.expandedLabel}>Datum početka (YYYY-MM-DD)</Text>
-            <TextInput style={s.modalInput} placeholder="2026-04-13" placeholderTextColor={Colors.muted}
+            <Text style={s.expandedLabel}>Datum početka (DD.MM.YYYY)</Text>
+            <TextInput style={s.modalInput} placeholder="DD.MM.YYYY" placeholderTextColor={Colors.muted}
               value={histPkgDate} onChangeText={setHistPkgDate} keyboardType="numbers-and-punctuation" />
             <Text style={s.expandedLabel}>Ukupno termina</Text>
             <TextInput style={s.modalInput} placeholder="0" placeholderTextColor={Colors.muted}
@@ -1877,6 +1978,7 @@ const s = StyleSheet.create({
   histSection: { fontFamily: Fonts.bodySemiBold, fontSize: 12, color: Colors.muted, marginTop: 16, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
   histRow: { paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   histReqRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  scheduledRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
   // Packages
   pkgList: { gap: 6, marginVertical: 12 },
   pkgOption: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: Colors.inputBorder, backgroundColor: Colors.background },

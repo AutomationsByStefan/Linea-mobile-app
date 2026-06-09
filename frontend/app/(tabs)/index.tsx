@@ -83,14 +83,19 @@ export default function HomeScreen() {
   };
 
   const bookTrial = async (slot: any) => {
+    const slotId = slot?.id || slot?._id || slot?.slot_id;
+    if (!slotId) {
+      Alert.alert('Greška', 'Termin nije moguće identifikovati. Pokušajte ponovo.');
+      return;
+    }
     setTrialBooking(true);
     try {
-      await api.post('/api/bookings/trial', { slot_id: slot.id || slot._id || slot.slot_id });
+      await api.post('/api/bookings/trial', { slot_id: slotId });
       setTrialModal(false);
       Alert.alert('Uspješno', 'Probni trening uspješno zakazan!');
       await loadData();
     } catch (e: any) {
-      Alert.alert('Greška', e.message || 'Nije moguće zakazati probni trening');
+      Alert.alert('Greška', e?.message || 'Nije moguće zakazati probni trening');
     } finally {
       setTrialBooking(false);
     }
