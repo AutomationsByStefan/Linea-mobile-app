@@ -35,6 +35,7 @@ export default function LoginScreen() {
   const [country, setCountry] = useState<Country>(countries[0]);
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
   const [userName, setUserName] = useState('');
   const [fullPhone, setFullPhone] = useState('');
   const [loading, setLoading] = useState(false);
@@ -47,6 +48,8 @@ export default function LoginScreen() {
   const [forgotCode, setForgotCode] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  const [showForgotNewPin, setShowForgotNewPin] = useState(false);
+  const [showForgotConfirmPin, setShowForgotConfirmPin] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotError, setForgotError] = useState('');
 
@@ -180,6 +183,8 @@ export default function LoginScreen() {
     setForgotCode('');
     setNewPin('');
     setConfirmPin('');
+    setShowForgotNewPin(false);
+    setShowForgotConfirmPin(false);
     setForgotError('');
     setForgotStep(1);
     setForgotVisible(true);
@@ -249,12 +254,20 @@ export default function LoginScreen() {
               value={pin}
               onChangeText={(t) => setPin(t.replace(/[^0-9]/g, '').slice(0, 4))}
               keyboardType="numeric"
-              secureTextEntry
+              secureTextEntry={!showPin}
               maxLength={4}
               placeholder="• • • •"
               placeholderTextColor={Colors.muted}
               textAlign="center"
             />
+            <TouchableOpacity
+              testID="toggle-pin"
+              onPress={() => setShowPin((v) => !v)}
+              style={styles.eyeBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Feather name={showPin ? 'eye-off' : 'eye'} size={18} color={Colors.muted} />
+            </TouchableOpacity>
           </View>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -343,11 +356,19 @@ export default function LoginScreen() {
                     value={newPin}
                     onChangeText={(t) => setNewPin(t.replace(/[^0-9]/g, '').slice(0, 4))}
                     keyboardType="numeric"
-                    secureTextEntry
+                    secureTextEntry={!showForgotNewPin}
                     placeholder="Novi 4-cifreni PIN"
                     placeholderTextColor={Colors.muted}
                     maxLength={4}
                   />
+                  <TouchableOpacity
+                    testID="toggle-forgot-new-pin"
+                    onPress={() => setShowForgotNewPin((v) => !v)}
+                    style={styles.eyeBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Feather name={showForgotNewPin ? 'eye-off' : 'eye'} size={18} color={Colors.muted} />
+                  </TouchableOpacity>
                 </View>
 
                 <View style={styles.inputContainer}>
@@ -357,11 +378,19 @@ export default function LoginScreen() {
                     value={confirmPin}
                     onChangeText={(t) => setConfirmPin(t.replace(/[^0-9]/g, '').slice(0, 4))}
                     keyboardType="numeric"
-                    secureTextEntry
+                    secureTextEntry={!showForgotConfirmPin}
                     placeholder="Potvrdi novi PIN"
                     placeholderTextColor={Colors.muted}
                     maxLength={4}
                   />
+                  <TouchableOpacity
+                    testID="toggle-forgot-confirm-pin"
+                    onPress={() => setShowForgotConfirmPin((v) => !v)}
+                    style={styles.eyeBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Feather name={showForgotConfirmPin ? 'eye-off' : 'eye'} size={18} color={Colors.muted} />
+                  </TouchableOpacity>
                 </View>
 
                 {forgotError ? <Text style={styles.error}>{forgotError}</Text> : null}
@@ -498,6 +527,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   inputIcon: { marginRight: 8 },
+  eyeBtn: { paddingLeft: 8 },
   phoneInput: {
     flex: 1,
     fontFamily: Fonts.body,

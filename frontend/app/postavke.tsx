@@ -27,6 +27,9 @@ export default function PostavkeScreen() {
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [savingPin, setSavingPin] = useState(false);
+  const [showCurrentPin, setShowCurrentPin] = useState(false);
+  const [showNewPin, setShowNewPin] = useState(false);
+  const [showConfirmPin, setShowConfirmPin] = useState(false);
 
   const saveProfile = async () => {
     if (!ime.trim() || !prezime.trim()) {
@@ -67,10 +70,16 @@ export default function PostavkeScreen() {
     setSavingPin(true);
     try {
       await userAPI.changePin({ old_pin: currentPin, new_pin: newPin });
-      Alert.alert('Uspješno', 'PIN je uspješno promijenjen.');
-      setCurrentPin('');
-      setNewPin('');
-      setConfirmPin('');
+      Alert.alert('Uspješno', 'PIN je uspješno promijenjen.', [
+        {
+          text: 'OK',
+          onPress: () => {
+            setCurrentPin('');
+            setNewPin('');
+            setConfirmPin('');
+          },
+        },
+      ]);
     } catch (e: any) {
       Alert.alert('Greška', e?.message || 'Greška pri promjeni PIN-a.');
     } finally {
@@ -167,40 +176,70 @@ export default function PostavkeScreen() {
             <Text style={styles.cardTitle}>Promjena PIN-a</Text>
 
             <Text style={styles.label}>Trenutni PIN</Text>
-            <TextInput
-              testID="input-current-pin"
-              style={styles.input}
-              value={currentPin}
-              onChangeText={setCurrentPin}
-              placeholder="Trenutni PIN"
-              placeholderTextColor={Colors.muted}
-              keyboardType="number-pad"
-              secureTextEntry
-            />
+            <View style={styles.pinRow}>
+              <TextInput
+                testID="input-current-pin"
+                style={styles.pinInput}
+                value={currentPin}
+                onChangeText={setCurrentPin}
+                placeholder="Trenutni PIN"
+                placeholderTextColor={Colors.muted}
+                keyboardType="number-pad"
+                secureTextEntry={!showCurrentPin}
+              />
+              <TouchableOpacity
+                testID="toggle-current-pin"
+                onPress={() => setShowCurrentPin((v) => !v)}
+                style={styles.eyeBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name={showCurrentPin ? 'eye-off' : 'eye'} size={18} color={Colors.muted} />
+              </TouchableOpacity>
+            </View>
 
             <Text style={styles.label}>Novi PIN</Text>
-            <TextInput
-              testID="input-new-pin"
-              style={styles.input}
-              value={newPin}
-              onChangeText={setNewPin}
-              placeholder="Novi PIN"
-              placeholderTextColor={Colors.muted}
-              keyboardType="number-pad"
-              secureTextEntry
-            />
+            <View style={styles.pinRow}>
+              <TextInput
+                testID="input-new-pin"
+                style={styles.pinInput}
+                value={newPin}
+                onChangeText={setNewPin}
+                placeholder="Novi PIN"
+                placeholderTextColor={Colors.muted}
+                keyboardType="number-pad"
+                secureTextEntry={!showNewPin}
+              />
+              <TouchableOpacity
+                testID="toggle-new-pin"
+                onPress={() => setShowNewPin((v) => !v)}
+                style={styles.eyeBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name={showNewPin ? 'eye-off' : 'eye'} size={18} color={Colors.muted} />
+              </TouchableOpacity>
+            </View>
 
             <Text style={styles.label}>Potvrdi novi PIN</Text>
-            <TextInput
-              testID="input-confirm-pin"
-              style={styles.input}
-              value={confirmPin}
-              onChangeText={setConfirmPin}
-              placeholder="Potvrdi novi PIN"
-              placeholderTextColor={Colors.muted}
-              keyboardType="number-pad"
-              secureTextEntry
-            />
+            <View style={styles.pinRow}>
+              <TextInput
+                testID="input-confirm-pin"
+                style={styles.pinInput}
+                value={confirmPin}
+                onChangeText={setConfirmPin}
+                placeholder="Potvrdi novi PIN"
+                placeholderTextColor={Colors.muted}
+                keyboardType="number-pad"
+                secureTextEntry={!showConfirmPin}
+              />
+              <TouchableOpacity
+                testID="toggle-confirm-pin"
+                onPress={() => setShowConfirmPin((v) => !v)}
+                style={styles.eyeBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name={showConfirmPin ? 'eye-off' : 'eye'} size={18} color={Colors.muted} />
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity
               testID="save-pin-btn"
@@ -241,6 +280,16 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body, fontSize: Sizes.body, color: Colors.foreground,
     marginBottom: 14, borderWidth: 1, borderColor: Colors.inputBorder,
   },
+  pinRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.background, borderRadius: 12, paddingHorizontal: 16,
+    marginBottom: 14, borderWidth: 1, borderColor: Colors.inputBorder,
+  },
+  pinInput: {
+    flex: 1, paddingVertical: 12,
+    fontFamily: Fonts.body, fontSize: Sizes.body, color: Colors.foreground,
+  },
+  eyeBtn: { paddingLeft: 12, paddingVertical: 4 },
   primaryBtn: {
     backgroundColor: Colors.primary, borderRadius: 9999, height: 48,
     justifyContent: 'center', alignItems: 'center', marginTop: 4,
