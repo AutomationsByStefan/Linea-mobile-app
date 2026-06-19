@@ -66,7 +66,7 @@ export default function PostavkeScreen() {
     }
     setSavingPin(true);
     try {
-      await userAPI.changePin({ current_pin: currentPin, new_pin: newPin });
+      await userAPI.changePin({ old_pin: currentPin, new_pin: newPin });
       Alert.alert('Uspješno', 'PIN je uspješno promijenjen.');
       setCurrentPin('');
       setNewPin('');

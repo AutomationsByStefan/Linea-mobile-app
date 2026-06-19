@@ -4,6 +4,17 @@ const API_BASE = 'https://linea-pilates-reformer-production.up.railway.app';
 
 type FetchOptions = RequestInit & { timeout?: number };
 
+// Backend (FastAPI) na 422 vraća `detail` kao NIZ objekata {msg,...}.
+// Alert.alert na Androidu očekuje string — ovdje sve svodimo na string
+// da app nikad ne pukne na prikazu greške.
+function normalizeError(body: any): string {
+  const d = body?.detail ?? body?.message;
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) return d.map((e) => e?.msg || String(e)).filter(Boolean).join(', ');
+  if (d && typeof d === 'object') return JSON.stringify(d);
+  return '';
+}
+
 async function apiFetch(path: string, options: FetchOptions = {}): Promise<any> {
   const { timeout = 15000, ...fetchOpts } = options;
   const controller = new AbortController();
@@ -23,7 +34,7 @@ async function apiFetch(path: string, options: FetchOptions = {}): Promise<any> 
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw { status: res.status, message: body.detail || body.message || res.statusText, body };
+      throw { status: res.status, message: normalizeError(body) || res.statusText, body };
     }
 
     const text = await res.text();
@@ -99,7 +110,7 @@ export const profileAPI = {
 export const userAPI = {
   updateProfile: (data: { ime?: string; prezime?: string; email?: string; phone?: string }) =>
     api.put('/api/user/profile', data),
-  changePin: (data: { current_pin: string; new_pin: string }) =>
+  changePin: (data: { old_pin: string; new_pin: string }) =>
     api.put('/api/user/change-pin', data),
 };
 
