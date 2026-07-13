@@ -6,12 +6,14 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts, Sizes, CardStyle, formatDateWithDay, toDateTime } from '../src/theme';
 import { trainingAPI, api } from '../src/api';
 
 export default function TreninziScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t: translate } = useTranslation();
 
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
   const [upcoming, setUpcoming] = useState<any[]>([]);
@@ -68,7 +70,7 @@ export default function TreninziScreen() {
   const handleCancel = async (training: any) => {
     const tid = training.id || training._id || training.training_id;
     if (!tid) {
-      Alert.alert('Greška', 'Trening nije moguće identifikovati.');
+      Alert.alert(translate('common.error'), translate('trainings.identifyError'));
       return;
     }
     const datum = training.datum || training.date;
@@ -85,19 +87,19 @@ export default function TreninziScreen() {
     if (hoursUntil > 12) {
       // Direct cancellation
       Alert.alert(
-        'Otkaži trening',
-        'Da li ste sigurni da želite otkazati ovaj trening?',
+        translate('trainings.cancelTitle'),
+        translate('trainings.cancelConfirm'),
         [
-          { text: 'Ne', style: 'cancel' },
-          { text: 'Da, otkaži', style: 'destructive', onPress: async () => {
+          { text: translate('common.no'), style: 'cancel' },
+          { text: translate('trainings.yesCancelIt'), style: 'destructive', onPress: async () => {
             setCancelling(tid);
             try {
               await api.post(`/api/trainings/${tid}/cancel`);
               // Remove from local state immediately
-              setUpcoming(prev => prev.filter((t: any) => (t.id || t._id || t.training_id) !== tid));
-              Alert.alert('Uspješno', 'Trening je otkazan');
+              setUpcoming(prev => prev.filter((tr: any) => (tr.id || tr._id || tr.training_id) !== tid));
+              Alert.alert(translate('common.success'), translate('trainings.cancelled'));
             } catch (e: any) {
-              Alert.alert('Greška', e?.message || 'Nije moguće otkazati trening');
+              Alert.alert(translate('common.error'), e?.message || translate('trainings.cancelError'));
             } finally {
               setCancelling(null);
             }
@@ -107,17 +109,17 @@ export default function TreninziScreen() {
     } else {
       // Within 12h — send a cancellation request for admin approval
       Alert.alert(
-        'Zahtjev za otkazivanje',
-        'Trening je zakazan za manje od 12 sati. Želite li poslati zahtjev za otkazivanje administratoru?',
+        translate('trainings.cancelRequestTitle'),
+        translate('trainings.cancelRequestMsg'),
         [
-          { text: 'Odustani', style: 'cancel' },
-          { text: 'Pošalji zahtjev', onPress: async () => {
+          { text: translate('common.cancel'), style: 'cancel' },
+          { text: translate('trainings.sendRequest'), onPress: async () => {
             setCancelling(tid);
             try {
               await api.post(`/api/trainings/${tid}/request-cancel`);
-              Alert.alert('Zahtjev poslan', 'Zahtjev za otkazivanje je poslan. Administrator će odobriti ili odbiti vaš zahtjev.');
+              Alert.alert(translate('trainings.requestSentTitle'), translate('trainings.requestSentMsg'));
             } catch (e: any) {
-              Alert.alert('Greška', e?.message || 'Greška pri slanju zahtjeva');
+              Alert.alert(translate('common.error'), e?.message || translate('packages.requestError'));
             } finally {
               setCancelling(null);
             }
@@ -135,7 +137,7 @@ export default function TreninziScreen() {
         <TouchableOpacity testID="treninzi-back-btn" onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color={Colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Tvoji treninzi</Text>
+        <Text style={styles.headerTitle}>{translate('trainings.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -145,14 +147,14 @@ export default function TreninziScreen() {
           style={[styles.tabBtn, tab === 'upcoming' && styles.tabBtnActive]}
           onPress={() => setTab('upcoming')}
         >
-          <Text style={[styles.tabText, tab === 'upcoming' && styles.tabTextActive]}>Predstojeći</Text>
+          <Text style={[styles.tabText, tab === 'upcoming' && styles.tabTextActive]}>{translate('trainings.upcoming')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           testID="tab-past"
           style={[styles.tabBtn, tab === 'past' && styles.tabBtnActive]}
           onPress={() => setTab('past')}
         >
-          <Text style={[styles.tabText, tab === 'past' && styles.tabTextActive]}>Iskorišteni</Text>
+          <Text style={[styles.tabText, tab === 'past' && styles.tabTextActive]}>{translate('trainings.past')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -167,7 +169,7 @@ export default function TreninziScreen() {
           <View style={styles.emptyWrap}>
             <Feather name="calendar" size={40} color={Colors.muted} />
             <Text style={styles.emptyText}>
-              {tab === 'upcoming' ? 'Nemate predstojeće treninge' : 'Nemate prošle treninge'}
+              {tab === 'upcoming' ? translate('trainings.noUpcoming') : translate('trainings.noPast')}
             </Text>
           </View>
         ) : (
@@ -182,10 +184,10 @@ export default function TreninziScreen() {
             // Status shown for past/completed trainings (Bug 10)
             const rawStatus = (t.tip || t.status || '').toString().toLowerCase();
             const statusLabel = t.historical
-              ? 'Istorijski'
+              ? translate('trainings.historical')
               : (rawStatus.includes('otkazan') || rawStatus === 'cancelled')
-                ? 'Otkazan'
-                : 'Iskorišten';
+                ? translate('trainings.cancelledStatus')
+                : translate('trainings.usedStatus');
 
             return (
               <View key={tid} style={styles.card} testID={`training-${tid}`}>
@@ -199,7 +201,7 @@ export default function TreninziScreen() {
                       <Feather name="clock" size={14} color={Colors.muted} />
                       <Text style={styles.trainingTime}>{vrijeme}</Text>
                     </View>
-                    <Text style={styles.instructor}>Instruktor: Marija Trisic</Text>
+                    <Text style={styles.instructor}>{translate('trainings.instructor')}: Marija Trisic</Text>
                   </View>
                   {isPast && (
                     <View style={styles.usedBadge}>
@@ -221,7 +223,7 @@ export default function TreninziScreen() {
                     ) : (
                       <>
                         <Feather name="x-circle" size={14} color={Colors.danger} />
-                        <Text style={styles.cancelTrainingText}>Otkaži trening</Text>
+                        <Text style={styles.cancelTrainingText}>{translate('trainings.cancelTraining')}</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -229,7 +231,7 @@ export default function TreninziScreen() {
 
                 {isPast && komentar && !isCommenting && (
                   <View style={styles.commentBox}>
-                    <Text style={styles.commentLabel}>Tvoj komentar:</Text>
+                    <Text style={styles.commentLabel}>{translate('trainings.yourComment')}:</Text>
                     <Text style={styles.commentContent}>{komentar}</Text>
                   </View>
                 )}
@@ -242,7 +244,7 @@ export default function TreninziScreen() {
                   >
                     <Feather name="message-square" size={14} color={Colors.primary} />
                     <Text style={styles.commentBtnText}>
-                      {komentar ? 'Izmijeni komentar' : 'Dodaj komentar'}
+                      {komentar ? translate('trainings.editComment') : translate('trainings.addComment')}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -254,7 +256,7 @@ export default function TreninziScreen() {
                       style={styles.commentInput}
                       value={commentText}
                       onChangeText={setCommentText}
-                      placeholder="Kako si se osjećao/la na treningu?"
+                      placeholder={translate('trainings.commentPlaceholder')}
                       placeholderTextColor={Colors.muted}
                       multiline
                       numberOfLines={3}
@@ -264,7 +266,7 @@ export default function TreninziScreen() {
                         style={styles.cancelBtn}
                         onPress={() => { setCommentingId(null); setCommentText(''); }}
                       >
-                        <Text style={styles.cancelBtnText}>Otkaži</Text>
+                        <Text style={styles.cancelBtnText}>{translate('common.cancel')}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         testID={`save-comment-${tid}`}
@@ -273,7 +275,7 @@ export default function TreninziScreen() {
                         disabled={saving}
                       >
                         <Feather name="send" size={14} color={Colors.white} />
-                        <Text style={styles.saveBtnText}>Sačuvaj</Text>
+                        <Text style={styles.saveBtnText}>{translate('common.save')}</Text>
                       </TouchableOpacity>
                     </View>
                   </View>

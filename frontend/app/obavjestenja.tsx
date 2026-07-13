@@ -6,6 +6,8 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
+import i18n from '../src/i18n';
 import { Colors, Fonts, Sizes, CardStyle } from '../src/theme';
 import { notificationsAPI } from '../src/api';
 
@@ -14,12 +16,12 @@ function timeAgo(dateStr: string): string {
   const d = new Date(dateStr);
   const diffMs = now.getTime() - d.getTime();
   const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return 'Upravo';
-  if (mins < 60) return `Prije ${mins} min`;
+  if (mins < 1) return i18n.t('notifications.justNow');
+  if (mins < 60) return i18n.t('notifications.minutesAgo', { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `Prije ${hours}h`;
+  if (hours < 24) return i18n.t('notifications.hoursAgo', { count: hours });
   const days = Math.floor(hours / 24);
-  return `Prije ${days} dana`;
+  return i18n.t('notifications.daysAgo', { count: days });
 }
 
 function getIcon(type: string): string {
@@ -31,6 +33,7 @@ function getIcon(type: string): string {
 export default function ObavjestenjaScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,10 +82,10 @@ export default function ObavjestenjaScreen() {
         <TouchableOpacity testID="obavjestenja-back-btn" onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color={Colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Obavještenja</Text>
+        <Text style={styles.headerTitle}>{t('profile.notifications')}</Text>
         {hasUnread ? (
           <TouchableOpacity testID="mark-all-read-btn" onPress={handleReadAll}>
-            <Text style={styles.markAll}>Označi sve</Text>
+            <Text style={styles.markAll}>{t('notifications.markAllRead')}</Text>
           </TouchableOpacity>
         ) : <View style={{ width: 80 }} />}
       </View>
@@ -97,7 +100,7 @@ export default function ObavjestenjaScreen() {
         ) : notifications.length === 0 ? (
           <View style={styles.emptyWrap}>
             <Feather name="bell" size={40} color={Colors.muted} />
-            <Text style={styles.emptyText}>Nema obavještenja</Text>
+            <Text style={styles.emptyText}>{t('notifications.noNotifications')}</Text>
           </View>
         ) : (
           notifications.map((n: any) => {

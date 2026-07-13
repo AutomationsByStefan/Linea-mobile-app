@@ -6,16 +6,18 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts, Sizes, CardStyle } from '../../src/theme';
 import { packagesAPI, homeAPI } from '../../src/api';
 
-const BADGES: Record<string, { label: string; color: string }> = {
-  'Linea Gold': { label: 'Najpopularniji', color: Colors.primary },
-  'Linea Premium': { label: 'Najisplativiji', color: '#A68B5B' },
+const BADGE_COLORS: Record<string, string> = {
+  'Linea Gold': Colors.primary,
+  'Linea Premium': '#A68B5B',
 };
 
 export default function PaketiScreen() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const [packages, setPackages] = useState<any[]>([]);
   const [myRequests, setMyRequests] = useState<any[]>([]);
   const [activeMemberships, setActiveMemberships] = useState<any[]>([]);
@@ -64,11 +66,11 @@ export default function PaketiScreen() {
     setRequesting(true);
     try {
       await packagesAPI.request(confirmPkg.id || confirmPkg._id || confirmPkg.package_id);
-      Alert.alert('Uspješno', 'Zahtjev za paket je poslan');
+      Alert.alert(t('common.success'), t('packages.requestSent'));
       setConfirmPkg(null);
       await loadData();
     } catch (e: any) {
-      Alert.alert('Greška', e.message || 'Greška pri slanju zahtjeva');
+      Alert.alert(t('common.error'), e.message || t('packages.requestError'));
     } finally {
       setRequesting(false);
     }
@@ -89,14 +91,14 @@ export default function PaketiScreen() {
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 8, paddingBottom: 24 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
-        <Text style={styles.pageTitle}>Paketi</Text>
-        <Text style={styles.pageSubtitle}>Odaberite paket koji vam odgovara</Text>
+        <Text style={styles.pageTitle}>{t('packages.pageTitle')}</Text>
+        <Text style={styles.pageSubtitle}>{t('packages.pageSubtitle')}</Text>
 
         {hasActiveMembership && (
           <View style={styles.activeBanner} testID="active-membership-banner">
             <Feather name="info" size={18} color={Colors.primary} />
             <Text style={styles.activeBannerText}>
-              Imate aktivan paket. Novi paket možete izabrati nakon isteka trenutnog.
+              {t('packages.activeBannerText')}
             </Text>
           </View>
         )}
@@ -105,7 +107,7 @@ export default function PaketiScreen() {
           <View style={styles.pendingBanner} testID="pending-request-banner">
             <Feather name="clock" size={18} color={Colors.primary} />
             <View style={styles.pendingTextWrap}>
-              <Text style={styles.pendingTitle}>Vaš paket čeka aktivaciju nakon uplate</Text>
+              <Text style={styles.pendingTitle}>{t('home.packagePending')}</Text>
               <Text style={styles.pendingName}>{pendingReq.package_name || pendingReq.naziv || ''}</Text>
             </View>
           </View>
@@ -113,7 +115,10 @@ export default function PaketiScreen() {
 
         {packages.map((pkg: any) => {
           const name = pkg.naziv || pkg.name || '';
-          const badge = BADGES[name];
+          const badgeColor = BADGE_COLORS[name];
+          const badgeLabel = name === 'Linea Gold' ? t('packages.mostPopular')
+            : name === 'Linea Premium' ? t('packages.bestValue') : undefined;
+          const badge = badgeColor ? { color: badgeColor, label: badgeLabel } : undefined;
           const price = pkg.cijena || pkg.price;
           const sessions = pkg.termini || pkg.broj_termina || pkg.sessions;
           const pkgId = pkg.id || pkg._id || pkg.package_id;
@@ -127,17 +132,17 @@ export default function PaketiScreen() {
               {(badge || pkg.popular || pkg.best_value) && (
                 <View style={[styles.badgeTag, { backgroundColor: badge?.color || (pkg.popular ? Colors.primary : '#A68B5B') }]}>
                   <Text style={styles.badgeText}>
-                    {badge?.label || (pkg.popular ? 'Najpopularniji' : 'Najisplativiji')}
+                    {badge?.label || (pkg.popular ? t('packages.mostPopular') : t('packages.bestValue'))}
                   </Text>
                 </View>
               )}
               <View style={styles.cardContent}>
                 <View style={styles.cardLeft}>
                   <Text style={styles.pkgName}>{name}</Text>
-                  <Text style={styles.pkgDesc}>Mala grupa do 3 osobe</Text>
+                  <Text style={styles.pkgDesc}>{t('packages.smallGroup')}</Text>
                   <View style={styles.sessionsRow}>
                     <Feather name="check" size={14} color={Colors.primary} />
-                    <Text style={styles.sessionsText}>{sessions} termina / mjesec</Text>
+                    <Text style={styles.sessionsText}>{t('packages.sessionsPerMonth', { count: sessions })}</Text>
                   </View>
                 </View>
                 <View style={styles.cardRight}>
@@ -154,7 +159,7 @@ export default function PaketiScreen() {
                 onPress={() => {
                   if (isBlocked) {
                     if (hasActiveMembership) {
-                      Alert.alert('Aktivan paket', 'Već imate aktivan paket. Novi paket možete izabrati kada istekne trenutni ili kada potrošite sve treninge.');
+                      Alert.alert(t('packages.activePackageTitle'), t('packages.activePackageMsg'));
                     }
                     return;
                   }
@@ -166,7 +171,7 @@ export default function PaketiScreen() {
                   badge ? styles.primaryBtnText : styles.secondaryBtnText,
                   isBlocked && styles.disabledText,
                 ]}>
-                  {hasActiveMembership ? 'Aktivan paket' : hasPending ? 'Na čekanju' : 'Odaberi'}
+                  {hasActiveMembership ? t('packages.activePackage') : hasPending ? t('packages.pending') : t('packages.select')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -178,16 +183,16 @@ export default function PaketiScreen() {
       <Modal visible={!!confirmPkg} transparent animationType="fade">
         <View style={styles.overlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Potvrda paketa</Text>
+            <Text style={styles.modalTitle}>{t('packages.confirmTitle')}</Text>
             <View style={styles.modalInfo}>
               <Text style={styles.modalPkgName}>{confirmPkg?.naziv || confirmPkg?.name}</Text>
               <Text style={styles.modalPkgPrice}>{confirmPkg?.cijena || confirmPkg?.price} KM</Text>
               <Text style={styles.modalPkgSessions}>
-                {confirmPkg?.broj_termina || confirmPkg?.sessions} termina / mjesec
+                {t('packages.sessionsPerMonth', { count: confirmPkg?.broj_termina || confirmPkg?.sessions })}
               </Text>
             </View>
             <Text style={styles.modalNote}>
-              Nakon potvrde, vaš paket će čekati aktivaciju od strane studija nakon uplate.
+              {t('packages.confirmNote')}
             </Text>
             <View style={styles.modalBtns}>
               <TouchableOpacity
@@ -195,7 +200,7 @@ export default function PaketiScreen() {
                 style={styles.modalBtnNo}
                 onPress={() => setConfirmPkg(null)}
               >
-                <Text style={styles.modalBtnNoText}>Odustani</Text>
+                <Text style={styles.modalBtnNoText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 testID="pkg-confirm-yes"
@@ -204,7 +209,7 @@ export default function PaketiScreen() {
                 disabled={requesting}
               >
                 {requesting ? <ActivityIndicator color={Colors.white} size="small" /> : (
-                  <Text style={styles.modalBtnYesText}>Potvrdi</Text>
+                  <Text style={styles.modalBtnYesText}>{t('common.confirm')}</Text>
                 )}
               </TouchableOpacity>
             </View>

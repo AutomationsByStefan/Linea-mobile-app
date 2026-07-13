@@ -8,6 +8,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts, Sizes, CardStyle, formatDD } from '../../src/theme';
 import { profileAPI, authAPI, api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
@@ -16,6 +17,7 @@ export default function ProfilScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
 
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -31,7 +33,7 @@ export default function ProfilScreen() {
   const pickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Dozvola', 'Potrebna je dozvola za pristup galeriji');
+      Alert.alert(t('profile.permissionTitle'), t('profile.permissionMsg'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -79,10 +81,10 @@ export default function ProfilScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Odjava', 'Da li ste sigurni da želite da se odjavite?', [
-      { text: 'Ne', style: 'cancel' },
+    Alert.alert(t('settings.logoutTitle'), t('settings.logoutConfirm'), [
+      { text: t('common.no'), style: 'cancel' },
       {
-        text: 'Da', style: 'destructive',
+        text: t('common.yes'), style: 'destructive',
         onPress: async () => {
           await logout();
           router.replace('/(auth)/login');
@@ -93,21 +95,21 @@ export default function ProfilScreen() {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Brisanje naloga',
-      'Da li ste sigurni da želite obrisati svoj nalog? Ova akcija se ne može poništiti.',
+      t('profile.deleteAccountTitle'),
+      t('profile.deleteAccountMsg'),
       [
-        { text: 'Odustani', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Obriši nalog',
+          text: t('profile.deleteAccountBtn'),
           style: 'destructive',
           onPress: () => {
             Alert.alert(
-              'Potvrda brisanja',
-              'Posljednja potvrda — vaš nalog i svi podaci će biti obrisani.',
+              t('profile.deleteConfirmTitle'),
+              t('profile.deleteConfirmMsg'),
               [
-                { text: 'Odustani', style: 'cancel' },
+                { text: t('common.cancel'), style: 'cancel' },
                 {
-                  text: 'Da, obriši',
+                  text: t('profile.deleteConfirmYes'),
                   style: 'destructive',
                   onPress: async () => {
                     setDeleting(true);
@@ -116,7 +118,7 @@ export default function ProfilScreen() {
                       await logout();
                       router.replace('/(auth)/login');
                     } catch (e: any) {
-                      Alert.alert('Greška', e.message || 'Greška pri brisanju naloga');
+                      Alert.alert(t('common.error'), e.message || t('profile.deleteError'));
                     } finally {
                       setDeleting(false);
                     }
@@ -161,13 +163,13 @@ export default function ProfilScreen() {
         {/* Membership Status */}
         {stats && (total > 0 || stats.pending_paket || stats.ima_aktivnu_clanarinu) && (
           <View style={styles.card} testID="membership-status-card">
-            <Text style={styles.cardTitle}>Status članarine</Text>
+            <Text style={styles.cardTitle}>{t('profile.membershipStatus')}</Text>
             {total > 0 ? (
               <>
                 <View style={styles.statusRow}>
                   <Feather name="trending-up" size={18} color={Colors.primary} />
                   <Text style={styles.statusText}>
-                    Preostalo termina: <Text style={styles.goldBig}>{remaining}</Text>/{total}
+                    {t('home.remainingSlots')}: <Text style={styles.goldBig}>{remaining}</Text>/{total}
                   </Text>
                 </View>
                 <View style={styles.progressBg}>
@@ -178,7 +180,7 @@ export default function ProfilScreen() {
               <View style={styles.statusRow}>
                 <Feather name="clock" size={18} color={Colors.primary} />
                 <Text style={styles.statusText}>
-                  Paket <Text style={styles.goldBig}>{stats.pending_paket}</Text> čeka aktivaciju
+                  {t('profile.packagePendingLabel')} <Text style={styles.goldBig}>{stats.pending_paket}</Text> {t('profile.awaitingActivation')}
                 </Text>
               </View>
             ) : null}
@@ -186,18 +188,18 @@ export default function ProfilScreen() {
               {stats.datum_pocetka && (
                 <View style={styles.statusDetail}>
                   <Feather name="calendar" size={14} color={Colors.muted} />
-                  <Text style={styles.detailText}>Početak: {formatDD(stats.datum_pocetka)}</Text>
+                  <Text style={styles.detailText}>{t('profile.start')}: {formatDD(stats.datum_pocetka)}</Text>
                 </View>
               )}
               {stats.datum_isteka && (
                 <View style={styles.statusDetail}>
                   <Feather name="calendar" size={14} color={Colors.muted} />
-                  <Text style={styles.detailText}>Važe do: {formatDD(stats.datum_isteka)}</Text>
+                  <Text style={styles.detailText}>{t('profile.validUntil')}: {formatDD(stats.datum_isteka)}</Text>
                 </View>
               )}
               <View style={styles.statusDetail}>
                 <Feather name="clock" size={14} color={Colors.muted} />
-                <Text style={styles.detailText}>Termini važe 35 dana</Text>
+                <Text style={styles.detailText}>{t('profile.slotsValid35Days')}</Text>
               </View>
             </View>
           </View>
@@ -205,7 +207,7 @@ export default function ProfilScreen() {
 
         {/* Info Card */}
         <View style={styles.card} testID="profile-info-card">
-          <Text style={styles.cardTitle}>Informacije</Text>
+          <Text style={styles.cardTitle}>{t('profile.information')}</Text>
           {user?.email && (
             <View style={styles.infoRow}>
               <Feather name="mail" size={16} color={Colors.muted} />
@@ -221,7 +223,7 @@ export default function ProfilScreen() {
           {(stats?.member_since || stats?.clan_od || stats?.created_at || user?.created_at) && (
             <View style={styles.infoRow}>
               <Feather name="calendar" size={16} color={Colors.muted} />
-              <Text style={styles.infoText}>Član od {formatDD(stats?.member_since || stats?.clan_od || stats?.created_at || user?.created_at)}</Text>
+              <Text style={styles.infoText}>{t('profile.memberSince')} {formatDD(stats?.member_since || stats?.clan_od || stats?.created_at || user?.created_at)}</Text>
             </View>
           )}
         </View>
@@ -237,7 +239,7 @@ export default function ProfilScreen() {
               <View style={[styles.menuIconWrap, styles.adminIconWrap]}>
                 <Feather name="shield" size={18} color={Colors.white} />
               </View>
-              <Text style={[styles.menuText, styles.adminMenuText]}>Admin Panel</Text>
+              <Text style={[styles.menuText, styles.adminMenuText]}>{t('profile.adminPanel')}</Text>
               <Feather name="chevron-right" size={20} color={Colors.primary} />
             </TouchableOpacity>
           )}
@@ -250,7 +252,7 @@ export default function ProfilScreen() {
             <View style={styles.menuIconWrap}>
               <Feather name="activity" size={18} color={Colors.primary} />
             </View>
-            <Text style={styles.menuText}>Praćenje težine</Text>
+            <Text style={styles.menuText}>{t('profile.weightTracking')}</Text>
             <Feather name="chevron-right" size={20} color={Colors.muted} />
           </TouchableOpacity>
 
@@ -262,7 +264,7 @@ export default function ProfilScreen() {
             <View style={styles.menuIconWrap}>
               <Feather name="bell" size={18} color={Colors.primary} />
             </View>
-            <Text style={styles.menuText}>Obavještenja</Text>
+            <Text style={styles.menuText}>{t('profile.notifications')}</Text>
             <Feather name="chevron-right" size={20} color={Colors.muted} />
           </TouchableOpacity>
 
@@ -274,20 +276,20 @@ export default function ProfilScreen() {
             <View style={styles.menuIconWrap}>
               <Feather name="settings" size={18} color={Colors.primary} />
             </View>
-            <Text style={styles.menuText}>Postavke</Text>
+            <Text style={styles.menuText}>{t('settings.title')}</Text>
             <Feather name="chevron-right" size={20} color={Colors.muted} />
           </TouchableOpacity>
         </View>
 
         {/* Logout */}
         <TouchableOpacity testID="logout-btn" style={styles.logoutBtn} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Odjavi se</Text>
+          <Text style={styles.logoutText}>{t('settings.logout')}</Text>
         </TouchableOpacity>
 
         {/* Delete Account */}
         <TouchableOpacity testID="delete-account-btn" style={styles.deleteBtn} onPress={handleDeleteAccount} disabled={deleting}>
           {deleting ? <ActivityIndicator color={Colors.danger} size="small" /> : (
-            <Text style={styles.deleteText}>Obriši nalog</Text>
+            <Text style={styles.deleteText}>{t('profile.deleteAccount')}</Text>
           )}
         </TouchableOpacity>
 

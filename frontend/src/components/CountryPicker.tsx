@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, FlatList, TextInput, StyleSheet, SafeAreaView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts, Sizes } from '../theme';
 import { countries, Country } from '../data/countries';
 
@@ -10,12 +11,16 @@ interface Props {
 }
 
 export default function CountryPicker({ selected, onSelect }: Props) {
+  const { t, i18n } = useTranslation();
   const [visible, setVisible] = useState(false);
   const [search, setSearch] = useState('');
+
+  const displayName = (c: Country) => (i18n.language === 'en' ? c.nameEn : c.name);
 
   const filtered = search
     ? countries.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
+        c.nameEn.toLowerCase().includes(search.toLowerCase()) ||
         c.dial.includes(search) ||
         c.code.toLowerCase().includes(search.toLowerCase())
       )
@@ -36,7 +41,7 @@ export default function CountryPicker({ selected, onSelect }: Props) {
       <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.modal}>
           <View style={styles.header}>
-            <Text style={styles.title}>Odaberite državu</Text>
+            <Text style={styles.title}>{t('countryPicker.selectCountry')}</Text>
             <TouchableOpacity testID="country-picker-close" onPress={() => setVisible(false)}>
               <Feather name="x" size={24} color={Colors.foreground} />
             </TouchableOpacity>
@@ -46,7 +51,7 @@ export default function CountryPicker({ selected, onSelect }: Props) {
             <TextInput
               testID="country-search-input"
               style={styles.searchInput}
-              placeholder="Pretraži..."
+              placeholder={t('countryPicker.search')}
               placeholderTextColor={Colors.muted}
               value={search}
               onChangeText={setSearch}
@@ -63,7 +68,7 @@ export default function CountryPicker({ selected, onSelect }: Props) {
                 onPress={() => { onSelect(item); setVisible(false); setSearch(''); }}
               >
                 <Text style={styles.itemFlag}>{item.flag}</Text>
-                <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.itemName} numberOfLines={1}>{displayName(item)}</Text>
                 <Text style={styles.itemDial}>{item.dial}</Text>
               </TouchableOpacity>
             )}

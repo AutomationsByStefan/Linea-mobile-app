@@ -6,6 +6,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts, Sizes } from '../../src/theme';
 import { useAuth } from '../../src/context/AuthContext';
 import { api } from '../../src/api';
@@ -22,6 +23,7 @@ export default function RegisterScreen() {
     googleToken?: string; googleEmail?: string; googleName?: string; googleSurname?: string;
   }>();
   const { register, setUser, checkAuth } = useAuth();
+  const { t } = useTranslation();
 
   const isGoogleFlow = params.fromGoogle === 'true' && !!params.googleToken;
 
@@ -40,10 +42,10 @@ export default function RegisterScreen() {
   const [error, setError] = useState('');
 
   const handleGoogleRegister = async () => {
-    if (!ime.trim()) { setError('Ime je obavezno'); return; }
-    if (!prezime.trim()) { setError('Prezime je obavezno'); return; }
+    if (!ime.trim()) { setError(t('register.firstNameRequired')); return; }
+    if (!prezime.trim()) { setError(t('register.lastNameRequired')); return; }
     const phoneNum = phone.replace(/\s/g, '');
-    if (!phoneNum) { setError('Broj telefona je obavezan'); return; }
+    if (!phoneNum) { setError(t('register.phoneRequired')); return; }
 
     const fullPhone = `${country.dial}${phoneNum}`;
     setLoading(true);
@@ -65,23 +67,23 @@ export default function RegisterScreen() {
         await checkAuth();
         router.replace('/(tabs)');
       } else {
-        setError(result.detail || 'Greška pri registraciji');
+        setError(result.detail || t('register.registerError'));
       }
     } catch (e: any) {
-      setError(e.message || 'Greška pri registraciji');
+      setError(e.message || t('register.registerError'));
     } finally {
       setLoading(false);
     }
   };
 
   const handleRegularRegister = async () => {
-    if (!ime.trim()) { setError('Ime je obavezno'); return; }
-    if (!prezime.trim()) { setError('Prezime je obavezno'); return; }
-    if (!email.trim()) { setError('Email je obavezan'); return; }
+    if (!ime.trim()) { setError(t('register.firstNameRequired')); return; }
+    if (!prezime.trim()) { setError(t('register.lastNameRequired')); return; }
+    if (!email.trim()) { setError(t('register.emailRequired')); return; }
     const phoneNum = phone.replace(/\s/g, '');
-    if (!phoneNum) { setError('Broj telefona je obavezan'); return; }
-    if (pin.length !== 4) { setError('PIN mora imati 4 cifre'); return; }
-    if (pin !== confirmPin) { setError('PIN-ovi se ne podudaraju'); return; }
+    if (!phoneNum) { setError(t('register.phoneRequired')); return; }
+    if (pin.length !== 4) { setError(t('login.pinLength')); return; }
+    if (pin !== confirmPin) { setError(t('login.pinMismatch')); return; }
 
     const fullPhone = params.phone || `${country.dial}${phoneNum}`;
     setLoading(true);
@@ -97,7 +99,7 @@ export default function RegisterScreen() {
       });
       router.replace('/(tabs)');
     } catch (e: any) {
-      setError(e.message || 'Greška pri registraciji');
+      setError(e.message || t('register.registerError'));
     } finally {
       setLoading(false);
     }
@@ -112,7 +114,7 @@ export default function RegisterScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Image source={{ uri: LOGO_URL }} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.title}>Kreirajte nalog</Text>
+          <Text style={styles.title}>{t('register.createAccount')}</Text>
 
           {/* Google email badge */}
           <View style={styles.googleBadge}>
@@ -120,29 +122,29 @@ export default function RegisterScreen() {
             <Text style={styles.googleBadgeText}>{params.googleEmail}</Text>
           </View>
 
-          <Text style={styles.subtitle}>Dopunite podatke za završetak registracije</Text>
+          <Text style={styles.subtitle}>{t('register.googleSubtitle')}</Text>
 
           {/* Name fields */}
           <View style={styles.row}>
             <View style={styles.halfField}>
-              <Text style={styles.label}>Ime *</Text>
+              <Text style={styles.label}>{t('register.firstNameLabel')}</Text>
               <TextInput
                 testID="register-ime-input"
                 style={styles.input}
                 value={ime}
                 onChangeText={setIme}
-                placeholder="Ime"
+                placeholder={t('settings.firstName')}
                 placeholderTextColor={Colors.muted}
               />
             </View>
             <View style={styles.halfField}>
-              <Text style={styles.label}>Prezime *</Text>
+              <Text style={styles.label}>{t('register.lastNameLabel')}</Text>
               <TextInput
                 testID="register-prezime-input"
                 style={styles.input}
                 value={prezime}
                 onChangeText={setPrezime}
-                placeholder="Prezime"
+                placeholder={t('settings.lastName')}
                 placeholderTextColor={Colors.muted}
               />
             </View>
@@ -150,7 +152,7 @@ export default function RegisterScreen() {
 
           {/* Phone with country picker */}
           <View style={styles.field}>
-            <Text style={styles.label}>Broj telefona * (sa pozivnim brojem)</Text>
+            <Text style={styles.label}>{t('register.phoneLabel')}</Text>
             <View style={styles.phoneRow}>
               <CountryPicker selected={country} onSelect={setCountry} />
               <View style={styles.phoneInputWrap}>
@@ -168,7 +170,7 @@ export default function RegisterScreen() {
             </View>
           </View>
 
-          <Text style={styles.noPin}>PIN nije potreban — prijava se vrši putem Google naloga</Text>
+          <Text style={styles.noPin}>{t('register.noPinNeeded')}</Text>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -179,12 +181,12 @@ export default function RegisterScreen() {
             disabled={loading}
           >
             {loading ? <ActivityIndicator color={Colors.white} /> : (
-              <Text style={styles.primaryBtnText}>Kreiraj nalog</Text>
+              <Text style={styles.primaryBtnText}>{t('register.createAccount')}</Text>
             )}
           </TouchableOpacity>
 
           <TouchableOpacity testID="register-back-btn" onPress={() => router.back()} style={styles.backLink}>
-            <Text style={styles.linkText}>Nazad na prijavu</Text>
+            <Text style={styles.linkText}>{t('register.backToLogin')}</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -199,24 +201,24 @@ export default function RegisterScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Image source={{ uri: LOGO_URL }} style={styles.logo} resizeMode="contain" />
-        <Text style={styles.title}>Kreirajte nalog</Text>
-        <Text style={styles.subtitle}>Sva polja su obavezna</Text>
+        <Text style={styles.title}>{t('register.createAccount')}</Text>
+        <Text style={styles.subtitle}>{t('register.allFieldsRequired')}</Text>
 
         <View style={styles.row}>
           <View style={styles.halfField}>
-            <Text style={styles.label}>Ime *</Text>
+            <Text style={styles.label}>{t('register.firstNameLabel')}</Text>
             <TextInput testID="register-ime-input" style={styles.input} value={ime} onChangeText={setIme}
-              placeholder="Ime" placeholderTextColor={Colors.muted} />
+              placeholder={t('settings.firstName')} placeholderTextColor={Colors.muted} />
           </View>
           <View style={styles.halfField}>
-            <Text style={styles.label}>Prezime *</Text>
+            <Text style={styles.label}>{t('register.lastNameLabel')}</Text>
             <TextInput testID="register-prezime-input" style={styles.input} value={prezime} onChangeText={setPrezime}
-              placeholder="Prezime" placeholderTextColor={Colors.muted} />
+              placeholder={t('settings.lastName')} placeholderTextColor={Colors.muted} />
           </View>
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Email *</Text>
+          <Text style={styles.label}>{t('register.emailLabel')}</Text>
           <View style={styles.inputRow}>
             <Feather name="mail" size={18} color={Colors.muted} style={styles.inputIcon} />
             <TextInput testID="register-email-input" style={styles.inputFlex} value={email} onChangeText={setEmail}
@@ -225,7 +227,7 @@ export default function RegisterScreen() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Broj telefona * (sa pozivnim brojem)</Text>
+          <Text style={styles.label}>{t('register.phoneLabel')}</Text>
           <View style={styles.phoneRow}>
             <CountryPicker selected={country} onSelect={setCountry} />
             <View style={styles.phoneInputWrap}>
@@ -238,13 +240,13 @@ export default function RegisterScreen() {
 
         <View style={styles.row}>
           <View style={styles.halfField}>
-            <Text style={styles.label}>PIN * (4 cifre)</Text>
+            <Text style={styles.label}>{t('register.pinLabel')}</Text>
             <TextInput testID="register-pin-input" style={styles.input} value={pin}
               onChangeText={(t) => setPin(t.replace(/[^0-9]/g, '').slice(0, 4))}
               placeholder="• • • •" placeholderTextColor={Colors.muted} keyboardType="numeric" secureTextEntry maxLength={4} />
           </View>
           <View style={styles.halfField}>
-            <Text style={styles.label}>Potvrdi PIN *</Text>
+            <Text style={styles.label}>{t('register.confirmPinLabel')}</Text>
             <TextInput testID="register-confirm-pin-input" style={styles.input} value={confirmPin}
               onChangeText={(t) => setConfirmPin(t.replace(/[^0-9]/g, '').slice(0, 4))}
               placeholder="• • • •" placeholderTextColor={Colors.muted} keyboardType="numeric" secureTextEntry maxLength={4} />
@@ -255,11 +257,11 @@ export default function RegisterScreen() {
 
         <TouchableOpacity testID="register-submit-btn" style={[styles.primaryBtn, loading && styles.btnDisabled]}
           onPress={handleRegularRegister} disabled={loading}>
-          {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.primaryBtnText}>Kreiraj nalog</Text>}
+          {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.primaryBtnText}>{t('register.createAccount')}</Text>}
         </TouchableOpacity>
 
         <TouchableOpacity testID="register-back-btn" onPress={() => router.back()} style={styles.backLink}>
-          <Text style={styles.linkText}>Nazad na prijavu</Text>
+          <Text style={styles.linkText}>{t('register.backToLogin')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

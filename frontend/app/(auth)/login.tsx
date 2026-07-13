@@ -8,6 +8,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts, Sizes } from '../../src/theme';
 import { authAPI, api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
@@ -30,6 +31,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { login, setUser, checkAuth } = useAuth();
+  const { t } = useTranslation();
 
   const [step, setStep] = useState<'phone' | 'pin'>('phone');
   const [country, setCountry] = useState<Country>(countries[0]);
@@ -73,7 +75,7 @@ export default function LoginScreen() {
     if (response?.type === 'success' && response.params?.code) {
   handleGoogleCode(response.params.code, request?.codeVerifier || '');
     } else if (response?.type === 'error') {
-      setError('Google prijava nije uspjela');
+      setError(t('login.googleFailed'));
       setGoogleLoading(false);
     }
   }, [response]);
@@ -103,7 +105,7 @@ export default function LoginScreen() {
         });
       }
     } catch (e: any) {
-      setError(e.message || 'Greška pri Google prijavi');
+      setError(e.message || t('login.googleError'));
     } finally {
       setGoogleLoading(false);
     }
@@ -142,7 +144,7 @@ export default function LoginScreen() {
   
   const handlePhoneCheck = async () => {
     const num = phone.replace(/\s/g, '');
-    if (!num) { setError('Unesite broj telefona'); return; }
+    if (!num) { setError(t('login.enterPhone')); return; }
     const full = `${country.dial}${num}`;
     setFullPhone(full);
     setLoading(true);
@@ -151,20 +153,20 @@ export default function LoginScreen() {
     try {
       const res = await authAPI.checkPhone(full);
       if (res.exists) {
-        setUserName(res.name || res.ime || 'Korisnik');
+        setUserName(res.name || res.ime || t('login.defaultUser'));
         setStep('pin');
       } else {
         router.push({ pathname: '/(auth)/register', params: { phone: full, countryCode: country.code } });
       }
     } catch (e: any) {
-      setError(e.message || 'Greška pri provjeri broja');
+      setError(e.message || t('login.phoneCheckError'));
     } finally {
       setLoading(false);
     }
   };
 
   const handleLogin = async () => {
-    if (pin.length !== 4) { setError('PIN mora imati 4 cifre'); return; }
+    if (pin.length !== 4) { setError(t('login.pinLength')); return; }
     setLoading(true);
     setError('');
 
@@ -172,7 +174,7 @@ export default function LoginScreen() {
       await login(fullPhone, pin);
       router.replace('/(tabs)');
     } catch (e: any) {
-      setError(e.message || 'Pogrešan PIN');
+      setError(e.message || t('login.wrongPin'));
     } finally {
       setLoading(false);
     }
@@ -191,31 +193,31 @@ export default function LoginScreen() {
   };
 
   const handleSendCode = async () => {
-    if (!forgotEmail.trim()) { setForgotError('Unesite email adresu'); return; }
+    if (!forgotEmail.trim()) { setForgotError(t('login.enterEmail')); return; }
     setForgotLoading(true);
     setForgotError('');
     try {
       await api.post('/api/auth/forgot-pin', { email: forgotEmail.trim() });
       setForgotStep(2);
     } catch (e: any) {
-      setForgotError(e.message || 'Greška pri slanju koda');
+      setForgotError(e.message || t('login.sendCodeError'));
     } finally {
       setForgotLoading(false);
     }
   };
 
   const handleResetPin = async () => {
-    if (forgotCode.length !== 6) { setForgotError('Unesite 6-cifreni kod'); return; }
-    if (newPin.length !== 4) { setForgotError('PIN mora imati 4 cifre'); return; }
-    if (newPin !== confirmPin) { setForgotError('PIN-ovi se ne podudaraju'); return; }
+    if (forgotCode.length !== 6) { setForgotError(t('login.enterCode')); return; }
+    if (newPin.length !== 4) { setForgotError(t('login.pinLength')); return; }
+    if (newPin !== confirmPin) { setForgotError(t('login.pinMismatch')); return; }
     setForgotLoading(true);
     setForgotError('');
     try {
       await api.post('/api/auth/reset-pin', { email: forgotEmail.trim(), code: forgotCode, new_pin: newPin });
       setForgotVisible(false);
-      Alert.alert('Uspjeh', 'PIN uspješno resetovan.');
+      Alert.alert(t('login.resetSuccessTitle'), t('login.resetSuccessMsg'));
     } catch (e: any) {
-      setForgotError(e.message || 'Greška pri resetovanju PIN-a');
+      setForgotError(e.message || t('login.resetError'));
     } finally {
       setForgotLoading(false);
     }
@@ -224,8 +226,8 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     if (!GOOGLE_CLIENT_ID) {
       Alert.alert(
-        'Google prijava',
-        'Za korištenje Google prijave potrebno je konfigurisati Google OAuth Client ID.\n\nKontaktirajte administratora studija.',
+        t('login.googleSignIn'),
+        t('login.googleNotConfigured'),
       );
       return;
     }
@@ -243,8 +245,8 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Image source={{ uri: LOGO_URL }} style={styles.logoLarge} resizeMode="contain" testID="login-logo" />
-          <Text style={styles.title}>Zdravo, {userName}</Text>
-          <Text style={styles.subtitle}>Unesite vaš 4-cifreni PIN</Text>
+          <Text style={styles.title}>{t('login.hello', { name: userName })}</Text>
+          <Text style={styles.subtitle}>{t('login.enterPinSubtitle')}</Text>
 
           <View style={styles.inputContainer}>
             <Feather name="lock" size={18} color={Colors.muted} style={styles.inputIcon} />
@@ -279,16 +281,16 @@ export default function LoginScreen() {
             disabled={loading}
           >
             {loading ? <ActivityIndicator color={Colors.white} /> : (
-              <Text style={styles.primaryBtnText}>Prijavi se</Text>
+              <Text style={styles.primaryBtnText}>{t('login.signIn')}</Text>
             )}
           </TouchableOpacity>
 
           <TouchableOpacity testID="login-back-btn" onPress={() => { setStep('phone'); setPin(''); setError(''); }}>
-            <Text style={styles.linkText}>Nazad</Text>
+            <Text style={styles.linkText}>{t('common.back')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={openForgotPin}>
-            <Text style={styles.forgotText}>Zaboravili ste PIN?</Text>
+            <Text style={styles.forgotText}>{t('login.forgotPin')}</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -303,8 +305,8 @@ export default function LoginScreen() {
 
             {forgotStep === 1 ? (
               <>
-                <Text style={styles.title}>Resetuj PIN</Text>
-                <Text style={styles.subtitle}>Unesite email adresu povezanu sa vašim nalogom</Text>
+                <Text style={styles.title}>{t('login.resetPin')}</Text>
+                <Text style={styles.subtitle}>{t('login.resetPinSubtitle')}</Text>
 
                 <View style={styles.inputContainer}>
                   <Feather name="mail" size={18} color={Colors.muted} style={styles.inputIcon} />
@@ -314,7 +316,7 @@ export default function LoginScreen() {
                     onChangeText={setForgotEmail}
                     keyboardType="email-address"
                     autoCapitalize="none"
-                    placeholder="vas@email.com"
+                    placeholder={t('login.emailPlaceholder')}
                     placeholderTextColor={Colors.muted}
                   />
                 </View>
@@ -327,14 +329,14 @@ export default function LoginScreen() {
                   disabled={forgotLoading}
                 >
                   {forgotLoading ? <ActivityIndicator color={Colors.white} /> : (
-                    <Text style={styles.primaryBtnText}>Pošalji kod</Text>
+                    <Text style={styles.primaryBtnText}>{t('login.sendCode')}</Text>
                   )}
                 </TouchableOpacity>
               </>
             ) : (
               <>
-                <Text style={styles.title}>Unesite kod</Text>
-                <Text style={styles.subtitle}>Kod je poslan na vašu email adresu.</Text>
+                <Text style={styles.title}>{t('login.enterCodeTitle')}</Text>
+                <Text style={styles.subtitle}>{t('login.codeSentSubtitle')}</Text>
 
                 <View style={styles.inputContainer}>
                   <Feather name="hash" size={18} color={Colors.muted} style={styles.inputIcon} />
@@ -343,7 +345,7 @@ export default function LoginScreen() {
                     value={forgotCode}
                     onChangeText={(t) => setForgotCode(t.replace(/[^0-9]/g, '').slice(0, 6))}
                     keyboardType="numeric"
-                    placeholder="6-cifreni kod"
+                    placeholder={t('login.codePlaceholder')}
                     placeholderTextColor={Colors.muted}
                     maxLength={6}
                   />
@@ -357,7 +359,7 @@ export default function LoginScreen() {
                     onChangeText={(t) => setNewPin(t.replace(/[^0-9]/g, '').slice(0, 4))}
                     keyboardType="numeric"
                     secureTextEntry={!showForgotNewPin}
-                    placeholder="Novi 4-cifreni PIN"
+                    placeholder={t('login.newPinPlaceholder')}
                     placeholderTextColor={Colors.muted}
                     maxLength={4}
                   />
@@ -379,7 +381,7 @@ export default function LoginScreen() {
                     onChangeText={(t) => setConfirmPin(t.replace(/[^0-9]/g, '').slice(0, 4))}
                     keyboardType="numeric"
                     secureTextEntry={!showForgotConfirmPin}
-                    placeholder="Potvrdi novi PIN"
+                    placeholder={t('login.confirmNewPinPlaceholder')}
                     placeholderTextColor={Colors.muted}
                     maxLength={4}
                   />
@@ -401,7 +403,7 @@ export default function LoginScreen() {
                   disabled={forgotLoading}
                 >
                   {forgotLoading ? <ActivityIndicator color={Colors.white} /> : (
-                    <Text style={styles.primaryBtnText}>Resetuj PIN</Text>
+                    <Text style={styles.primaryBtnText}>{t('login.resetPin')}</Text>
                   )}
                 </TouchableOpacity>
               </>
@@ -418,7 +420,7 @@ export default function LoginScreen() {
                 setForgotVisible(false);
               }
             }}>
-              <Text style={styles.linkText}>Nazad</Text>
+              <Text style={styles.linkText}>{t('common.back')}</Text>
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -434,8 +436,8 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Image source={{ uri: LOGO_URL }} style={styles.logoLarge} resizeMode="contain" testID="login-logo" />
-        <Text style={styles.title}>Dobrodošli</Text>
-        <Text style={styles.subtitle}>Unesite broj telefona za prijavu</Text>
+        <Text style={styles.title}>{t('login.welcome')}</Text>
+        <Text style={styles.subtitle}>{t('login.enterPhoneSubtitle')}</Text>
 
         <View style={styles.phoneRow}>
           <CountryPicker selected={country} onSelect={setCountry} />
@@ -462,13 +464,13 @@ export default function LoginScreen() {
           disabled={loading}
         >
           {loading ? <ActivityIndicator color={Colors.white} /> : (
-            <Text style={styles.primaryBtnText}>Nastavi</Text>
+            <Text style={styles.primaryBtnText}>{t('login.continue')}</Text>
           )}
         </TouchableOpacity>
 {false && (
         <View style={styles.separator}>
           <View style={styles.separatorLine} />
-          <Text style={styles.separatorText}>ili</Text>
+          <Text style={styles.separatorText}>{t('login.or')}</Text>
           <View style={styles.separatorLine} />
         </View>
 )}
@@ -482,7 +484,7 @@ export default function LoginScreen() {
           {googleLoading ? <ActivityIndicator color={Colors.foreground} /> : (
             <>
               <Text style={styles.googleIcon}>G</Text>
-              <Text style={styles.googleBtnText}>Prijavi se sa Google</Text>
+              <Text style={styles.googleBtnText}>{t('login.signInWithGoogle')}</Text>
             </>
           )}
         </TouchableOpacity>

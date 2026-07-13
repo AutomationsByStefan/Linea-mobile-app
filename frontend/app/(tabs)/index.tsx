@@ -6,6 +6,7 @@ import {
 import { useRouter, useNavigation } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts, Sizes, Spacing, CardStyle, formatDateWithDay, formatDD, daysUntil } from '../../src/theme';
 import { homeAPI, scheduleAPI, trainingAPI, api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
@@ -15,6 +16,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   const [memberships, setMemberships] = useState<any[]>([]);
   const [trainings, setTrainings] = useState<any[]>([]);
@@ -85,17 +87,17 @@ export default function HomeScreen() {
   const bookTrial = async (slot: any) => {
     const slotId = slot?.id || slot?._id || slot?.slot_id;
     if (!slotId) {
-      Alert.alert('Greška', 'Termin nije moguće identifikovati. Pokušajte ponovo.');
+      Alert.alert(t('common.error'), t('home.slotIdError'));
       return;
     }
     setTrialBooking(true);
     try {
       await api.post('/api/bookings/trial', { slot_id: slotId });
       setTrialModal(false);
-      Alert.alert('Uspješno', 'Probni trening uspješno zakazan!');
+      Alert.alert(t('common.success'), t('home.trialBooked'));
       await loadData();
     } catch (e: any) {
-      Alert.alert('Greška', e?.message || 'Nije moguće zakazati probni trening');
+      Alert.alert(t('common.error'), e?.message || t('home.trialBookError'));
     } finally {
       setTrialBooking(false);
     }
@@ -149,8 +151,8 @@ export default function HomeScreen() {
         <View style={styles.heroCard} testID="home-hero-card">
           <View style={styles.heroTop}>
             <View style={styles.heroTextWrap}>
-              <Text style={styles.heroTitle}>Zdravo, {user?.name || user?.ime || 'Korisnik'}</Text>
-              <Text style={styles.heroSubtitle}>Vrijeme je da rezervišeš naredni trening?</Text>
+              <Text style={styles.heroTitle}>{t('login.hello', { name: user?.name || user?.ime || t('login.defaultUser') })}</Text>
+              <Text style={styles.heroSubtitle}>{t('home.heroSubtitle')}</Text>
             </View>
             <TouchableOpacity
               testID="notifications-btn"
@@ -170,7 +172,7 @@ export default function HomeScreen() {
             style={styles.heroBtn}
             onPress={() => router.push('/(tabs)/termini')}
           >
-            <Text style={styles.heroBtnText}>Rezerviši termin</Text>
+            <Text style={styles.heroBtnText}>{t('home.bookSlot')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -179,7 +181,7 @@ export default function HomeScreen() {
           <View style={styles.minusBanner} testID="minus-banner">
             <Feather name="alert-triangle" size={20} color={Colors.danger} />
             <Text style={styles.minusBannerText}>
-              Imate {minusTrainings} trening(a) u minusu. Potrebna je uplata.
+              {t('home.minusTrainings', { count: minusTrainings })}
             </Text>
           </View>
         )}
@@ -196,8 +198,8 @@ export default function HomeScreen() {
               <Feather name="gift" size={24} color={Colors.white} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.trialTitle}>Zakaži besplatan probni trening</Text>
-              <Text style={styles.trialSubtitle}>Isprobaj svoj prvi trening bez obaveza</Text>
+              <Text style={styles.trialTitle}>{t('home.trialTitle')}</Text>
+              <Text style={styles.trialSubtitle}>{t('home.trialSubtitle')}</Text>
             </View>
             <Feather name="chevron-right" size={22} color={Colors.white} />
           </TouchableOpacity>
@@ -206,15 +208,15 @@ export default function HomeScreen() {
         {/* Active Memberships */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Aktivne članarine</Text>
+            <Text style={styles.sectionTitle}>{t('home.activeMemberships')}</Text>
             <TouchableOpacity testID="memberships-see-all" onPress={() => router.push('/clanarine')}>
-              <Text style={styles.seeAll}>Vidi sve {'>'}</Text>
+              <Text style={styles.seeAll}>{t('home.seeAll')} {'>'}</Text>
             </TouchableOpacity>
           </View>
           {pendingReq && (
             <View style={[styles.card, styles.pendingCard]}>
               <Feather name="clock" size={18} color={Colors.primary} />
-              <Text style={styles.pendingText}>Vaš paket čeka aktivaciju nakon uplate</Text>
+              <Text style={styles.pendingText}>{t('home.packagePending')}</Text>
             </View>
           )}
           {activeMembership ? (
@@ -225,12 +227,12 @@ export default function HomeScreen() {
                   (activeMembership.tip === 'aktivna') ? styles.memberBadgeActive : styles.memberBadgeExpired]}>
                   <Text style={[styles.memberBadgeText,
                     (activeMembership.tip === 'aktivna') ? styles.memberBadgeTextActive : styles.memberBadgeTextExpired]}>
-                    {activeMembership.tip === 'aktivna' ? 'Aktivna' : 'Istekla'}
+                    {activeMembership.tip === 'aktivna' ? t('home.active') : t('home.expired')}
                   </Text>
                 </View>
               </View>
               <Text style={styles.membershipTerms}>
-                Preostalo termina: <Text style={styles.goldText}>
+                {t('home.remainingSlots')}: <Text style={styles.goldText}>
                   {activeMembership.preostali_termini ?? activeMembership.remaining ?? 0}
                 </Text>
                 /{activeMembership.ukupni_termini ?? activeMembership.total ?? 0}
@@ -249,14 +251,14 @@ export default function HomeScreen() {
                 return (
                   <View style={styles.membershipDates}>
                     {start && (
-                      <Text style={styles.membershipDateText}>Početak paketa: {formatDD(start)}</Text>
+                      <Text style={styles.membershipDateText}>{t('home.packageStart')}: {formatDD(start)}</Text>
                     )}
                     {expiry && (isExpired ? (
-                      <Text style={styles.membershipExpiredText}>Paket je istekao {formatDD(expiry)}</Text>
+                      <Text style={styles.membershipExpiredText}>{t('home.packageExpired', { date: formatDD(expiry) })}</Text>
                     ) : (
                       <>
-                        <Text style={styles.membershipDateText}>Paket važi do: {formatDD(expiry)}</Text>
-                        {left != null && <Text style={styles.membershipDaysLeft}>Preostalo {left} dana</Text>}
+                        <Text style={styles.membershipDateText}>{t('home.packageValidUntil')}: {formatDD(expiry)}</Text>
+                        {left != null && <Text style={styles.membershipDaysLeft}>{t('home.daysRemaining', { count: left })}</Text>}
                       </>
                     ))}
                   </View>
@@ -265,13 +267,13 @@ export default function HomeScreen() {
             </View>
           ) : (
             <View style={styles.card}>
-              <Text style={styles.emptyText}>Trenutno nemate aktivnih članarina</Text>
+              <Text style={styles.emptyText}>{t('home.noActiveMemberships')}</Text>
               <TouchableOpacity
                 testID="go-packages-btn"
                 style={styles.secondaryBtn}
                 onPress={() => router.push('/(tabs)/paketi')}
               >
-                <Text style={styles.secondaryBtnText}>Pogledaj pakete</Text>
+                <Text style={styles.secondaryBtnText}>{t('home.viewPackages')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -280,9 +282,9 @@ export default function HomeScreen() {
         {/* Upcoming Training */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Predstojeći trening</Text>
+            <Text style={styles.sectionTitle}>{t('home.upcomingTraining')}</Text>
             <TouchableOpacity testID="trainings-see-all" onPress={() => router.push('/treninzi')}>
-              <Text style={styles.seeAll}>Vidi sve {'>'}</Text>
+              <Text style={styles.seeAll}>{t('home.seeAll')} {'>'}</Text>
             </TouchableOpacity>
           </View>
           {nextTraining ? (
@@ -304,13 +306,13 @@ export default function HomeScreen() {
             </View>
           ) : (
             <View style={styles.card}>
-              <Text style={styles.emptyText}>Trenutno nemate izabranih termina</Text>
+              <Text style={styles.emptyText}>{t('home.noUpcomingSlots')}</Text>
               <TouchableOpacity
                 testID="go-schedule-btn"
                 style={styles.secondaryBtn}
                 onPress={() => router.push('/(tabs)/termini')}
               >
-                <Text style={styles.secondaryBtnText}>Zakaži trening</Text>
+                <Text style={styles.secondaryBtnText}>{t('home.bookTraining')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -318,7 +320,7 @@ export default function HomeScreen() {
 
         {/* Contact Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Kontakt informacije</Text>
+          <Text style={styles.sectionTitle}>{t('home.contactInfo')}</Text>
           <TouchableOpacity
             testID="contact-phone"
             style={styles.card}
@@ -365,16 +367,16 @@ export default function HomeScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Probni trening</Text>
+              <Text style={styles.modalTitle}>{t('home.trialModalTitle')}</Text>
               <TouchableOpacity onPress={() => setTrialModal(false)}>
                 <Feather name="x" size={22} color={Colors.foreground} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.modalHint}>Izaberite termin za svoj besplatan probni trening</Text>
+            <Text style={styles.modalHint}>{t('home.trialModalHint')}</Text>
             {trialSlotsLoading ? (
               <ActivityIndicator color={Colors.primary} style={{ marginVertical: 24 }} />
             ) : trialSlots.length === 0 ? (
-              <Text style={styles.emptyText}>Nema dostupnih termina</Text>
+              <Text style={styles.emptyText}>{t('home.noAvailableSlots')}</Text>
             ) : (
               <ScrollView style={{ maxHeight: 380, marginVertical: 8 }}>
                 {trialSlots.map((sl: any) => {
@@ -390,7 +392,7 @@ export default function HomeScreen() {
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={styles.trialSlotDate}>{formatDateWithDay(sl.datum || sl.date)}</Text>
-                        <Text style={styles.trialSlotTime}>{sl.vrijeme || sl.time} • {free}/{total} slobodno</Text>
+                        <Text style={styles.trialSlotTime}>{sl.vrijeme || sl.time} • {t('home.freeSpots', { free, total })}</Text>
                       </View>
                       <Feather name="chevron-right" size={20} color={Colors.primary} />
                     </TouchableOpacity>
