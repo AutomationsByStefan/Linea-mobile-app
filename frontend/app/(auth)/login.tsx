@@ -14,6 +14,7 @@ import { authAPI, api } from '../../src/api';
 import { useAuth } from '../../src/context/AuthContext';
 import CountryPicker from '../../src/components/CountryPicker';
 import { countries, Country } from '../../src/data/countries';
+import { LANGUAGE_KEY } from '../../src/i18n';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -31,7 +32,15 @@ export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { login, setUser, checkAuth } = useAuth();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+
+  const changeLanguage = async (lng: 'bs' | 'en') => {
+    await i18n.changeLanguage(lng);
+    try {
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      await AsyncStorage.setItem(LANGUAGE_KEY, lng);
+    } catch {}
+  };
 
   const [step, setStep] = useState<'phone' | 'pin'>('phone');
   const [country, setCountry] = useState<Country>(countries[0]);
@@ -239,6 +248,24 @@ export default function LoginScreen() {
   if (step === 'pin') {
     return (
       <>
+      <View style={[styles.langSwitchWrap, { top: insets.top + 12 }]} pointerEvents="box-none">
+        <View style={styles.langSwitch}>
+          <TouchableOpacity
+            testID="lang-bh-btn"
+            style={[styles.langBtn, i18n.language === 'bs' && styles.langBtnActive]}
+            onPress={() => changeLanguage('bs')}
+          >
+            <Text style={[styles.langBtnText, i18n.language === 'bs' && styles.langBtnTextActive]}>Bosanski</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            testID="lang-en-btn"
+            style={[styles.langBtn, i18n.language === 'en' && styles.langBtnActive]}
+            onPress={() => changeLanguage('en')}
+          >
+            <Text style={[styles.langBtnText, i18n.language === 'en' && styles.langBtnTextActive]}>English</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60, flexGrow: 1, justifyContent: 'center' }]}
@@ -430,6 +457,25 @@ export default function LoginScreen() {
   }
 
   return (
+    <>
+    <View style={[styles.langSwitchWrap, { top: insets.top + 12 }]} pointerEvents="box-none">
+      <View style={styles.langSwitch}>
+        <TouchableOpacity
+          testID="lang-bh-btn"
+          style={[styles.langBtn, i18n.language === 'bs' && styles.langBtnActive]}
+          onPress={() => changeLanguage('bs')}
+        >
+          <Text style={[styles.langBtnText, i18n.language === 'bs' && styles.langBtnTextActive]}>Bosanski</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          testID="lang-en-btn"
+          style={[styles.langBtn, i18n.language === 'en' && styles.langBtnActive]}
+          onPress={() => changeLanguage('en')}
+        >
+          <Text style={[styles.langBtnText, i18n.language === 'en' && styles.langBtnTextActive]}>English</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60, flexGrow: 1, justifyContent: 'center' }]}
@@ -491,11 +537,42 @@ export default function LoginScreen() {
   )}
       </ScrollView>
     </KeyboardAvoidingView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
+  langSwitchWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  langSwitch: {
+    flexDirection: 'row',
+    backgroundColor: Colors.cardBg,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: Colors.inputBorder,
+    padding: 3,
+    gap: 2,
+  },
+  langBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 9999,
+    alignItems: 'center',
+  },
+  langBtnActive: { backgroundColor: Colors.primary },
+  langBtnText: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: Sizes.tiny,
+    color: Colors.muted,
+    letterSpacing: 0.5,
+  },
+  langBtnTextActive: { color: Colors.white },
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 28,
