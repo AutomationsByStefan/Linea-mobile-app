@@ -267,26 +267,15 @@ export default function PostavkeScreen() {
           {/* Language */}
           <View style={styles.card} testID="postavke-language-card">
             <Text style={styles.cardTitle}>{t('settings.language')}</Text>
-            <View style={styles.langRow}>
-              <TouchableOpacity
-                testID="lang-bs-btn"
-                style={[styles.langBtn, i18n.language === 'bs' && styles.langBtnActive]}
-                onPress={() => changeLanguage('bs')}
-              >
-                <Text style={[styles.langBtnText, i18n.language === 'bs' && styles.langBtnTextActive]}>
-                  Bosanski
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                testID="lang-en-btn"
-                style={[styles.langBtn, i18n.language === 'en' && styles.langBtnActive]}
-                onPress={() => changeLanguage('en')}
-              >
-                <Text style={[styles.langBtnText, i18n.language === 'en' && styles.langBtnTextActive]}>
-                  English
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              testID="lang-toggle-btn"
+              style={styles.langBtn}
+              onPress={() => changeLanguage(i18n.language === 'en' ? 'bs' : 'en')}
+            >
+              <Text style={styles.langBtnText}>
+                {i18n.language === 'en' ? 'Vrati na sistemska podešavanja' : '🇬🇧 English'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Logout */}
@@ -331,15 +320,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', marginTop: 4,
   },
   primaryBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.white },
-  langRow: { flexDirection: 'row', gap: 10 },
   langBtn: {
-    flex: 1, height: 44, borderRadius: 9999,
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: Colors.inputBorder, backgroundColor: Colors.background,
+    alignSelf: 'center',
+    backgroundColor: Colors.background,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: Colors.inputBorder,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  langBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  langBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.foreground },
-  langBtnTextActive: { color: Colors.white },
+  langBtnText: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: Sizes.tiny,
+    color: Colors.muted,
+    letterSpacing: 0.5,
+  },
   logoutBtn: {
     borderWidth: 2, borderColor: Colors.danger, borderRadius: 9999, height: 48,
     justifyContent: 'center', alignItems: 'center', marginBottom: 24,
