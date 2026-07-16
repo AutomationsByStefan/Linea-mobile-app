@@ -245,33 +245,29 @@ export default function LoginScreen() {
     promptAsync();
   };
 
+  const isEnglish = i18n.language === 'en';
+  const langToggleBtn = (
+    <TouchableOpacity
+      testID="lang-toggle-btn"
+      style={styles.langBtn}
+      onPress={() => changeLanguage(isEnglish ? 'bs' : 'en')}
+    >
+      <Text style={styles.langBtnText}>
+        {isEnglish ? 'Vrati na sistemska podešavanja' : '🇬🇧 English'}
+      </Text>
+    </TouchableOpacity>
+  );
+
   if (step === 'pin') {
     return (
       <>
-      <View style={[styles.langSwitchWrap, { top: insets.top + 12 }]} pointerEvents="box-none">
-        <View style={styles.langSwitch}>
-          <TouchableOpacity
-            testID="lang-bh-btn"
-            style={[styles.langBtn, i18n.language === 'bs' && styles.langBtnActive]}
-            onPress={() => changeLanguage('bs')}
-          >
-            <Text style={[styles.langBtnText, i18n.language === 'bs' && styles.langBtnTextActive]}>Bosanski</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            testID="lang-en-btn"
-            style={[styles.langBtn, i18n.language === 'en' && styles.langBtnActive]}
-            onPress={() => changeLanguage('en')}
-          >
-            <Text style={[styles.langBtnText, i18n.language === 'en' && styles.langBtnTextActive]}>English</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60, flexGrow: 1, justifyContent: 'center' }]}
           keyboardShouldPersistTaps="handled"
         >
           <Image source={{ uri: LOGO_URL }} style={styles.logoLarge} resizeMode="contain" testID="login-logo" />
+          {langToggleBtn}
           <Text style={styles.title}>{t('login.hello', { name: userName })}</Text>
           <Text style={styles.subtitle}>{t('login.enterPinSubtitle')}</Text>
 
@@ -458,30 +454,13 @@ export default function LoginScreen() {
 
   return (
     <>
-    <View style={[styles.langSwitchWrap, { top: insets.top + 12 }]} pointerEvents="box-none">
-      <View style={styles.langSwitch}>
-        <TouchableOpacity
-          testID="lang-bh-btn"
-          style={[styles.langBtn, i18n.language === 'bs' && styles.langBtnActive]}
-          onPress={() => changeLanguage('bs')}
-        >
-          <Text style={[styles.langBtnText, i18n.language === 'bs' && styles.langBtnTextActive]}>Bosanski</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          testID="lang-en-btn"
-          style={[styles.langBtn, i18n.language === 'en' && styles.langBtnActive]}
-          onPress={() => changeLanguage('en')}
-        >
-          <Text style={[styles.langBtnText, i18n.language === 'en' && styles.langBtnTextActive]}>English</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60, flexGrow: 1, justifyContent: 'center' }]}
         keyboardShouldPersistTaps="handled"
       >
         <Image source={{ uri: LOGO_URL }} style={styles.logoLarge} resizeMode="contain" testID="login-logo" />
+        {langToggleBtn}
         <Text style={styles.title}>{t('login.welcome')}</Text>
         <Text style={styles.subtitle}>{t('login.enterPhoneSubtitle')}</Text>
 
@@ -543,36 +522,23 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
-  langSwitchWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  langSwitch: {
-    flexDirection: 'row',
+  langBtn: {
+    alignSelf: 'center',
     backgroundColor: Colors.cardBg,
     borderRadius: 9999,
     borderWidth: 1,
     borderColor: Colors.inputBorder,
-    padding: 3,
-    gap: 2,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: -16,
+    marginBottom: 28,
   },
-  langBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 9999,
-    alignItems: 'center',
-  },
-  langBtnActive: { backgroundColor: Colors.primary },
   langBtnText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: Sizes.tiny,
     color: Colors.muted,
     letterSpacing: 0.5,
   },
-  langBtnTextActive: { color: Colors.white },
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 28,
