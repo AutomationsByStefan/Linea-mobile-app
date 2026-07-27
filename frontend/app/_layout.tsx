@@ -1,3 +1,4 @@
+import '../src/i18n';
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { useFonts } from 'expo-font';

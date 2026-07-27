@@ -7,12 +7,14 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Line, Circle, Text as SvgText, Polyline, Rect } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts, Sizes, CardStyle, formatDD } from '../src/theme';
 import { weightAPI } from '../src/api';
 
 export default function TezinaScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const [entries, setEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,24 +43,24 @@ export default function TezinaScreen() {
 
   const handleAdd = async () => {
     const w = parseFloat(newWeight);
-    if (isNaN(w) || w <= 0) { Alert.alert('Greška', 'Unesite validnu težinu'); return; }
+    if (isNaN(w) || w <= 0) { Alert.alert(t('common.error'), t('weight.invalidWeight')); return; }
     setAdding(true);
     try {
       await weightAPI.add(w);
       setNewWeight('');
       await loadData();
     } catch (e: any) {
-      Alert.alert('Greška', e.message || 'Greška pri dodavanju');
+      Alert.alert(t('common.error'), e.message || t('weight.addError'));
     } finally {
       setAdding(false);
     }
   };
 
   const handleDelete = (id: string) => {
-    Alert.alert('Brisanje', 'Da li ste sigurni?', [
-      { text: 'Ne', style: 'cancel' },
+    Alert.alert(t('weight.deleteTitle'), t('weight.deleteConfirm'), [
+      { text: t('common.no'), style: 'cancel' },
       {
-        text: 'Da', style: 'destructive',
+        text: t('common.yes'), style: 'destructive',
         onPress: async () => {
           try {
             await weightAPI.remove(id);
@@ -97,15 +99,15 @@ export default function TezinaScreen() {
     const previous = weights[weights.length - 2];
     const diff = newest - previous;
     if (diff > 0.05) {
-      trendText = `Dobili ste ${diff.toFixed(1)} kg`;
+      trendText = t('weight.gained', { value: diff.toFixed(1) });
       trendColor = Colors.danger;
       trendIcon = 'trending-up';
     } else if (diff < -0.05) {
-      trendText = `Izgubili ste ${Math.abs(diff).toFixed(1)} kg`;
+      trendText = t('weight.lost', { value: Math.abs(diff).toFixed(1) });
       trendColor = Colors.success;
       trendIcon = 'trending-down';
     } else {
-      trendText = 'Bez promjene';
+      trendText = t('weight.noChange');
     }
   }
 
@@ -115,7 +117,7 @@ export default function TezinaScreen() {
         <TouchableOpacity testID="tezina-back-btn" onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color={Colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Praćenje težine</Text>
+        <Text style={styles.headerTitle}>{t('profile.weightTracking')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -125,7 +127,7 @@ export default function TezinaScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
         <Text style={styles.infoText}>
-          Ova funkcija je opcionalna. Pratite svoj napredak ako želite.
+          {t('weight.optionalInfo')}
         </Text>
 
         {/* Add Entry */}
@@ -136,7 +138,7 @@ export default function TezinaScreen() {
               style={styles.addInput}
               value={newWeight}
               onChangeText={setNewWeight}
-              placeholder="Težina"
+              placeholder={t('weight.weightPlaceholder')}
               placeholderTextColor={Colors.muted}
               keyboardType="decimal-pad"
             />
@@ -198,7 +200,7 @@ export default function TezinaScreen() {
         ) : entries.length === 0 ? (
           <View style={styles.emptyWrap}>
             <Feather name="activity" size={40} color={Colors.muted} />
-            <Text style={styles.emptyText}>Nema unosa težine</Text>
+            <Text style={styles.emptyText}>{t('weight.noEntries')}</Text>
           </View>
         ) : (
           entries.map((e: any, i: number) => {

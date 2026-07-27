@@ -6,14 +6,25 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts, Sizes, CardStyle } from '../src/theme';
 import { userAPI } from '../src/api';
 import { useAuth } from '../src/context/AuthContext';
+import i18n, { LANGUAGE_KEY } from '../src/i18n';
 
 export default function PostavkeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, logout, checkAuth } = useAuth();
+  const { t } = useTranslation();
+
+  const changeLanguage = async (lng: 'bs' | 'en') => {
+    await i18n.changeLanguage(lng);
+    try {
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      await AsyncStorage.setItem(LANGUAGE_KEY, lng);
+    } catch {}
+  };
 
   // Personal data
   const [ime, setIme] = useState(user?.ime || '');
@@ -27,10 +38,13 @@ export default function PostavkeScreen() {
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [savingPin, setSavingPin] = useState(false);
+  const [showCurrentPin, setShowCurrentPin] = useState(false);
+  const [showNewPin, setShowNewPin] = useState(false);
+  const [showConfirmPin, setShowConfirmPin] = useState(false);
 
   const saveProfile = async () => {
     if (!ime.trim() || !prezime.trim()) {
-      Alert.alert('Greška', 'Ime i prezime su obavezni.');
+      Alert.alert(t('common.error'), t('settings.nameRequired'));
       return;
     }
     setSavingProfile(true);
@@ -43,9 +57,9 @@ export default function PostavkeScreen() {
       });
       // Refresh the cached user so the rest of the app sees the new data
       await checkAuth();
-      Alert.alert('Uspješno', 'Lični podaci su sačuvani.');
+      Alert.alert(t('common.success'), t('settings.profileSaved'));
     } catch (e: any) {
-      Alert.alert('Greška', e?.message || 'Greška pri čuvanju podataka.');
+      Alert.alert(t('common.error'), e?.message || t('settings.profileSaveError'));
     } finally {
       setSavingProfile(false);
     }
@@ -53,36 +67,42 @@ export default function PostavkeScreen() {
 
   const savePin = async () => {
     if (!currentPin || !newPin || !confirmPin) {
-      Alert.alert('Greška', 'Popunite sva polja za promjenu PIN-a.');
+      Alert.alert(t('common.error'), t('settings.fillAllPinFields'));
       return;
     }
     if (newPin.length < 4) {
-      Alert.alert('Greška', 'Novi PIN mora imati najmanje 4 cifre.');
+      Alert.alert(t('common.error'), t('settings.pinMinLength'));
       return;
     }
     if (newPin !== confirmPin) {
-      Alert.alert('Greška', 'Novi PIN i potvrda se ne podudaraju.');
+      Alert.alert(t('common.error'), t('settings.pinMismatch'));
       return;
     }
     setSavingPin(true);
     try {
-      await userAPI.changePin({ current_pin: currentPin, new_pin: newPin });
-      Alert.alert('Uspješno', 'PIN je uspješno promijenjen.');
-      setCurrentPin('');
-      setNewPin('');
-      setConfirmPin('');
+      await userAPI.changePin({ old_pin: currentPin, new_pin: newPin });
+      Alert.alert(t('common.success'), t('settings.pinChanged'), [
+        {
+          text: t('common.ok'),
+          onPress: () => {
+            setCurrentPin('');
+            setNewPin('');
+            setConfirmPin('');
+          },
+        },
+      ]);
     } catch (e: any) {
-      Alert.alert('Greška', e?.message || 'Greška pri promjeni PIN-a.');
+      Alert.alert(t('common.error'), e?.message || t('settings.pinChangeError'));
     } finally {
       setSavingPin(false);
     }
   };
 
   const handleLogout = () => {
-    Alert.alert('Odjava', 'Da li ste sigurni da želite da se odjavite?', [
-      { text: 'Ne', style: 'cancel' },
+    Alert.alert(t('settings.logoutTitle'), t('settings.logoutConfirm'), [
+      { text: t('common.no'), style: 'cancel' },
       {
-        text: 'Da', style: 'destructive',
+        text: t('common.yes'), style: 'destructive',
         onPress: async () => {
           await logout();
           router.replace('/(auth)/login');
@@ -97,7 +117,7 @@ export default function PostavkeScreen() {
         <TouchableOpacity testID="postavke-back-btn" onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color={Colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Postavke</Text>
+        <Text style={styles.headerTitle}>{t('settings.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -105,25 +125,25 @@ export default function PostavkeScreen() {
         <ScrollView style={styles.flex} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {/* Personal data */}
           <View style={styles.card} testID="postavke-personal-card">
-            <Text style={styles.cardTitle}>Lični podaci</Text>
+            <Text style={styles.cardTitle}>{t('settings.personalData')}</Text>
 
-            <Text style={styles.label}>Ime</Text>
+            <Text style={styles.label}>{t('settings.firstName')}</Text>
             <TextInput
               testID="input-ime"
               style={styles.input}
               value={ime}
               onChangeText={setIme}
-              placeholder="Ime"
+              placeholder={t('settings.firstName')}
               placeholderTextColor={Colors.muted}
             />
 
-            <Text style={styles.label}>Prezime</Text>
+            <Text style={styles.label}>{t('settings.lastName')}</Text>
             <TextInput
               testID="input-prezime"
               style={styles.input}
               value={prezime}
               onChangeText={setPrezime}
-              placeholder="Prezime"
+              placeholder={t('settings.lastName')}
               placeholderTextColor={Colors.muted}
             />
 
@@ -139,13 +159,13 @@ export default function PostavkeScreen() {
               autoCapitalize="none"
             />
 
-            <Text style={styles.label}>Broj telefona</Text>
+            <Text style={styles.label}>{t('settings.phone')}</Text>
             <TextInput
               testID="input-phone"
               style={styles.input}
               value={phone}
               onChangeText={setPhone}
-              placeholder="Broj telefona"
+              placeholder={t('settings.phone')}
               placeholderTextColor={Colors.muted}
               keyboardType="phone-pad"
             />
@@ -158,49 +178,79 @@ export default function PostavkeScreen() {
             >
               {savingProfile
                 ? <ActivityIndicator color={Colors.white} size="small" />
-                : <Text style={styles.primaryBtnText}>Sačuvaj podatke</Text>}
+                : <Text style={styles.primaryBtnText}>{t('settings.saveData')}</Text>}
             </TouchableOpacity>
           </View>
 
           {/* Change PIN */}
           <View style={styles.card} testID="postavke-pin-card">
-            <Text style={styles.cardTitle}>Promjena PIN-a</Text>
+            <Text style={styles.cardTitle}>{t('settings.pinChangeTitle')}</Text>
 
-            <Text style={styles.label}>Trenutni PIN</Text>
-            <TextInput
-              testID="input-current-pin"
-              style={styles.input}
-              value={currentPin}
-              onChangeText={setCurrentPin}
-              placeholder="Trenutni PIN"
-              placeholderTextColor={Colors.muted}
-              keyboardType="number-pad"
-              secureTextEntry
-            />
+            <Text style={styles.label}>{t('settings.currentPin')}</Text>
+            <View style={styles.pinRow}>
+              <TextInput
+                testID="input-current-pin"
+                style={styles.pinInput}
+                value={currentPin}
+                onChangeText={setCurrentPin}
+                placeholder={t('settings.currentPin')}
+                placeholderTextColor={Colors.muted}
+                keyboardType="number-pad"
+                secureTextEntry={!showCurrentPin}
+              />
+              <TouchableOpacity
+                testID="toggle-current-pin"
+                onPress={() => setShowCurrentPin((v) => !v)}
+                style={styles.eyeBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name={showCurrentPin ? 'eye-off' : 'eye'} size={18} color={Colors.muted} />
+              </TouchableOpacity>
+            </View>
 
-            <Text style={styles.label}>Novi PIN</Text>
-            <TextInput
-              testID="input-new-pin"
-              style={styles.input}
-              value={newPin}
-              onChangeText={setNewPin}
-              placeholder="Novi PIN"
-              placeholderTextColor={Colors.muted}
-              keyboardType="number-pad"
-              secureTextEntry
-            />
+            <Text style={styles.label}>{t('settings.newPin')}</Text>
+            <View style={styles.pinRow}>
+              <TextInput
+                testID="input-new-pin"
+                style={styles.pinInput}
+                value={newPin}
+                onChangeText={setNewPin}
+                placeholder={t('settings.newPin')}
+                placeholderTextColor={Colors.muted}
+                keyboardType="number-pad"
+                secureTextEntry={!showNewPin}
+              />
+              <TouchableOpacity
+                testID="toggle-new-pin"
+                onPress={() => setShowNewPin((v) => !v)}
+                style={styles.eyeBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name={showNewPin ? 'eye-off' : 'eye'} size={18} color={Colors.muted} />
+              </TouchableOpacity>
+            </View>
 
-            <Text style={styles.label}>Potvrdi novi PIN</Text>
-            <TextInput
-              testID="input-confirm-pin"
-              style={styles.input}
-              value={confirmPin}
-              onChangeText={setConfirmPin}
-              placeholder="Potvrdi novi PIN"
-              placeholderTextColor={Colors.muted}
-              keyboardType="number-pad"
-              secureTextEntry
-            />
+            <Text style={styles.label}>{t('settings.confirmNewPin')}</Text>
+            <View style={styles.pinRow}>
+              <TextInput
+                testID="input-confirm-pin"
+                style={styles.pinInput}
+                value={confirmPin}
+                onChangeText={setConfirmPin}
+                placeholder={t('settings.confirmNewPin')}
+                placeholderTextColor={Colors.muted}
+                keyboardType="number-pad"
+                secureTextEntry={!showConfirmPin}
+              />
+              <TouchableOpacity
+                testID="toggle-confirm-pin"
+                onPress={() => setShowConfirmPin((v) => !v)}
+                style={styles.eyeBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name={showConfirmPin ? 'eye-off' : 'eye'} size={18} color={Colors.muted} />
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity
               testID="save-pin-btn"
@@ -210,13 +260,27 @@ export default function PostavkeScreen() {
             >
               {savingPin
                 ? <ActivityIndicator color={Colors.white} size="small" />
-                : <Text style={styles.primaryBtnText}>Promijeni PIN</Text>}
+                : <Text style={styles.primaryBtnText}>{t('settings.changePin')}</Text>}
+            </TouchableOpacity>
+          </View>
+
+          {/* Language */}
+          <View style={styles.card} testID="postavke-language-card">
+            <Text style={styles.cardTitle}>{t('settings.language')}</Text>
+            <TouchableOpacity
+              testID="lang-toggle-btn"
+              style={styles.langBtn}
+              onPress={() => changeLanguage(i18n.language === 'en' ? 'bs' : 'en')}
+            >
+              <Text style={styles.langBtnText}>
+                {i18n.language === 'en' ? 'Vrati na sistemska podešavanja' : '🇬🇧 English'}
+              </Text>
             </TouchableOpacity>
           </View>
 
           {/* Logout */}
           <TouchableOpacity testID="postavke-logout-btn" style={styles.logoutBtn} onPress={handleLogout}>
-            <Text style={styles.logoutText}>Odjavi se</Text>
+            <Text style={styles.logoutText}>{t('settings.logout')}</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -241,11 +305,36 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body, fontSize: Sizes.body, color: Colors.foreground,
     marginBottom: 14, borderWidth: 1, borderColor: Colors.inputBorder,
   },
+  pinRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.background, borderRadius: 12, paddingHorizontal: 16,
+    marginBottom: 14, borderWidth: 1, borderColor: Colors.inputBorder,
+  },
+  pinInput: {
+    flex: 1, paddingVertical: 12,
+    fontFamily: Fonts.body, fontSize: Sizes.body, color: Colors.foreground,
+  },
+  eyeBtn: { paddingLeft: 12, paddingVertical: 4 },
   primaryBtn: {
     backgroundColor: Colors.primary, borderRadius: 9999, height: 48,
     justifyContent: 'center', alignItems: 'center', marginTop: 4,
   },
   primaryBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: Sizes.body, color: Colors.white },
+  langBtn: {
+    alignSelf: 'center',
+    backgroundColor: Colors.background,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: Colors.inputBorder,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  langBtnText: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: Sizes.tiny,
+    color: Colors.muted,
+    letterSpacing: 0.5,
+  },
   logoutBtn: {
     borderWidth: 2, borderColor: Colors.danger, borderRadius: 9999, height: 48,
     justifyContent: 'center', alignItems: 'center', marginBottom: 24,

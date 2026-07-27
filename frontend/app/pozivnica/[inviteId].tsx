@@ -5,6 +5,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts, Sizes, CardStyle, formatDD } from '../../src/theme';
 import { invitesAPI } from '../../src/api';
 
@@ -14,6 +15,7 @@ export default function PozivnicaScreen() {
   const { inviteId } = useLocalSearchParams<{ inviteId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const [invite, setInvite] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -27,7 +29,7 @@ export default function PozivnicaScreen() {
         const data = await invitesAPI.get(inviteId);
         setInvite(data);
       } catch (e: any) {
-        setError(e.message || 'Pozivnica nije pronađena');
+        setError(e.message || t('invite.notFound'));
       } finally {
         setLoading(false);
       }
@@ -39,11 +41,11 @@ export default function PozivnicaScreen() {
     setAccepting(true);
     try {
       await invitesAPI.accept(inviteId);
-      Alert.alert('Uspješno', 'Poziv je prihvaćen!', [
-        { text: 'OK', onPress: () => router.replace('/(tabs)') },
+      Alert.alert(t('common.success'), t('invite.accepted'), [
+        { text: t('common.ok'), onPress: () => router.replace('/(tabs)') },
       ]);
     } catch (e: any) {
-      Alert.alert('Greška', e.message || 'Greška pri prihvatanju poziva');
+      Alert.alert(t('common.error'), e.message || t('invite.acceptError'));
     } finally {
       setAccepting(false);
     }
@@ -63,7 +65,7 @@ export default function PozivnicaScreen() {
         <Feather name="alert-circle" size={40} color={Colors.danger} />
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.backLink} onPress={() => router.replace('/(tabs)')}>
-          <Text style={styles.backLinkText}>Nazad na početnu</Text>
+          <Text style={styles.backLinkText}>{t('invite.backToHome')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -76,9 +78,9 @@ export default function PozivnicaScreen() {
         <Text style={styles.logoText}>Linea Pilates</Text>
       </View>
 
-      <Text style={styles.title}>Poziv na trening</Text>
+      <Text style={styles.title}>{t('invite.title')}</Text>
       <Text style={styles.subtitle}>
-        {invite?.inviter_name || invite?.ime || 'Prijatelj/ica'} te poziva na zajednički Pilates Reformer trening
+        {t('invite.subtitle', { name: invite?.inviter_name || invite?.ime || t('invite.friend') })}
       </Text>
 
       <View style={styles.card}>
@@ -107,12 +109,12 @@ export default function PozivnicaScreen() {
         {accepting ? (
           <ActivityIndicator color={Colors.white} />
         ) : (
-          <Text style={styles.acceptBtnText}>Prihvati poziv</Text>
+          <Text style={styles.acceptBtnText}>{t('invite.acceptButton')}</Text>
         )}
       </TouchableOpacity>
 
       <Text style={styles.note}>
-        Potrebna je aktivna članarina za prihvatanje poziva
+        {t('invite.note')}
       </Text>
     </View>
   );

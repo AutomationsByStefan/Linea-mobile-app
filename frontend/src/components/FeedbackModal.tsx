@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts, Sizes, formatDD } from '../theme';
 import { feedbackAPI } from '../api';
 
@@ -23,6 +24,7 @@ interface Props {
 const emojis = ['😔', '😐', '🙂', '😊', '🤩'];
 
 export default function FeedbackModal({ training, visible, onClose, onSubmitted }: Props) {
+  const { t } = useTranslation();
   const [fizicko, setFizicko] = useState(0);
   const [kvalitet, setKvalitet] = useState(0);
   const [napredak, setNapredak] = useState(0);
@@ -76,16 +78,16 @@ export default function FeedbackModal({ training, visible, onClose, onSubmitted 
           <TouchableOpacity testID="feedback-close" style={styles.closeBtn} onPress={onClose}>
             <Feather name="x" size={20} color={Colors.muted} />
           </TouchableOpacity>
-          <Text style={styles.title}>Kako ti je prijao trening?</Text>
+          <Text style={styles.title}>{t('feedback.title')}</Text>
           {datum ? (
             <Text style={styles.info}>
               {formatDD(datum)} • {vrijeme}
             </Text>
           ) : null}
 
-          <RatingRow label="Fizičko stanje" value={fizicko} onChange={setFizicko} />
-          <RatingRow label="Kvalitet treninga" value={kvalitet} onChange={setKvalitet} />
-          <RatingRow label="Osjećaj napretka" value={napredak} onChange={setNapredak} />
+          <RatingRow label={t('feedback.physicalState')} value={fizicko} onChange={setFizicko} />
+          <RatingRow label={t('feedback.trainingQuality')} value={kvalitet} onChange={setKvalitet} />
+          <RatingRow label={t('feedback.progressFeeling')} value={napredak} onChange={setNapredak} />
 
           <TouchableOpacity
             testID="feedback-submit-btn"
@@ -93,7 +95,7 @@ export default function FeedbackModal({ training, visible, onClose, onSubmitted 
             onPress={handleSubmit}
             disabled={!canSubmit || submitting}
           >
-            <Text style={styles.submitText}>{submitting ? 'Šaljem...' : 'Pošalji'}</Text>
+            <Text style={styles.submitText}>{submitting ? t('feedback.sending') : t('feedback.send')}</Text>
           </TouchableOpacity>
         </View>
       </View>

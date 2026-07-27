@@ -7,7 +7,8 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from 'expo-router';
 import Svg, { Path, Rect } from 'react-native-svg';
-import { Colors, Fonts, Sizes, CardStyle, BosnianDaysShort, formatDD } from '../../src/theme';
+import { useTranslation } from 'react-i18next';
+import { Colors, Fonts, Sizes, CardStyle, getDayNamesShort, formatDD } from '../../src/theme';
 import { scheduleAPI, trainingAPI, homeAPI } from '../../src/api';
 
 // Reformer bed SVG icon
@@ -42,6 +43,7 @@ function toDateStr(d: Date): string {
 
 export default function TerminiScreen() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const workingDays = useMemo(() => getWorkingDays(10), []);
 
   const [selectedDate, setSelectedDate] = useState(workingDays[0]);
@@ -124,7 +126,7 @@ export default function TerminiScreen() {
 
       await loadData();
     } catch (e: any) {
-      Alert.alert('Greška', e.message || 'Nije moguće rezervisati termin');
+      Alert.alert(t('common.error'), e.message || t('schedule.bookError'));
     } finally {
       setBooking(false);
     }
@@ -152,7 +154,7 @@ export default function TerminiScreen() {
             <BedIcon key={i} filled={i >= occupied} size={22} />
           ))}
         </View>
-        {isFull && <Text style={st.slotFullLabel}>Puno</Text>}
+        {isFull && <Text style={st.slotFullLabel}>{t('schedule.full')}</Text>}
       </TouchableOpacity>
     );
   };
@@ -172,11 +174,11 @@ export default function TerminiScreen() {
         contentContainerStyle={[st.content, { paddingTop: insets.top + 8, paddingBottom: 24 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
-        <Text style={st.pageTitle}>Rezerviši termin</Text>
-        <Text style={st.pageSubtitle}>Pronađi idealan termin za sebe</Text>
+        <Text style={st.pageTitle}>{t('schedule.pageTitle')}</Text>
+        <Text style={st.pageSubtitle}>{t('schedule.pageSubtitle')}</Text>
 
         {/* ===== DATE STRIP — Redesigned ===== */}
-        <Text style={st.dateHeader}>Izaberi datum</Text>
+        <Text style={st.dateHeader}>{t('schedule.selectDate')}</Text>
         <View style={st.dateStripBg}>
           <ScrollView
             horizontal
@@ -194,7 +196,7 @@ export default function TerminiScreen() {
                   onPress={() => setSelectedDate(day)}
                 >
                   <Text style={[st.dateDayLabel, isSelected && st.dateDayLabelSelected]}>
-                    {BosnianDaysShort[day.getDay()]}
+                    {getDayNamesShort()[day.getDay()]}
                   </Text>
                   <View style={[st.dateCircle, isSelected && st.dateCircleSelected]}>
                     <Text style={[st.dateNum, isSelected && st.dateNumSelected]}>
@@ -212,13 +214,13 @@ export default function TerminiScreen() {
           <View style={st.myBookingCard} testID="my-booking-today">
             <Feather name="check-circle" size={18} color={Colors.primary} />
             <Text style={st.myBookingText}>
-              Vaš termin za ovaj dan: {myBookingToday.vrijeme || myBookingToday.time}
+              {t('schedule.yourBookingToday', { time: myBookingToday.vrijeme || myBookingToday.time })}
             </Text>
           </View>
         )}
 
         {/* ===== TIME SLOTS — 3-column grid with bed icons ===== */}
-        <Text style={st.slotsTitle}>Dostupni termini</Text>
+        <Text style={st.slotsTitle}>{t('schedule.availableSlots')}</Text>
 
         {daySlots.length > 0 ? (
           <View style={st.slotGrid}>
@@ -229,7 +231,7 @@ export default function TerminiScreen() {
         ) : (
           <View style={st.emptyWrap}>
             <Feather name="calendar" size={40} color={Colors.muted} />
-            <Text style={st.emptyText}>Nema dostupnih termina za ovaj datum</Text>
+            <Text style={st.emptyText}>{t('schedule.noSlotsForDate')}</Text>
           </View>
         )}
       </ScrollView>
@@ -238,7 +240,7 @@ export default function TerminiScreen() {
       <Modal visible={!!confirmSlot} transparent animationType="fade">
         <View style={st.overlay}>
           <View style={st.modalCard}>
-            <Text style={st.modalTitle}>Potvrda termina</Text>
+            <Text style={st.modalTitle}>{t('schedule.confirmTitle')}</Text>
             <Text style={st.modalDate}>
               {confirmSlot && formatDD(confirmSlot.datum || confirmSlot.date || dateStr)}
             </Text>
@@ -247,19 +249,19 @@ export default function TerminiScreen() {
               <View style={st.minusNote}>
                 <Feather name="alert-triangle" size={16} color={Colors.danger} />
                 <Text style={st.minusNoteText}>
-                  Nemate preostale termine. Ovaj trening će biti uračunat u minus.
+                  {t('schedule.minusNote')}
                 </Text>
               </View>
             )}
-            <Text style={st.modalQuestion}>Da li potvrđujete dolazak?</Text>
+            <Text style={st.modalQuestion}>{t('schedule.confirmQuestion')}</Text>
             <View style={st.modalBtns}>
               <TouchableOpacity testID="confirm-cancel-btn" style={st.modalBtnNo} onPress={() => setConfirmSlot(null)}>
-                <Text style={st.modalBtnNoText}>Ne</Text>
+                <Text style={st.modalBtnNoText}>{t('common.no')}</Text>
               </TouchableOpacity>
               <TouchableOpacity testID="confirm-yes-btn" style={[st.modalBtnYes, booking && { opacity: 0.6 }]}
                 onPress={() => confirmSlot && handleBook(confirmSlot)} disabled={booking}>
                 {booking ? <ActivityIndicator color={Colors.white} size="small" /> : (
-                  <Text style={st.modalBtnYesText}>Da</Text>
+                  <Text style={st.modalBtnYesText}>{t('common.yes')}</Text>
                 )}
               </TouchableOpacity>
             </View>

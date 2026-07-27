@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { Platform } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts } from '../../src/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
@@ -8,6 +9,7 @@ import { useAuth } from '../../src/context/AuthContext';
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const isAdmin = user?.is_admin === true;
 
   return (
@@ -39,28 +41,28 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Početna',
+          title: t('tabs.home'),
           tabBarIcon: ({ color }) => <Feather name="home" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="termini"
         options={{
-          title: 'Termini',
+          title: t('tabs.schedule'),
           tabBarIcon: ({ color }) => <Feather name="calendar" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="paketi"
         options={{
-          title: 'Paketi',
+          title: t('tabs.packages'),
           tabBarIcon: ({ color }) => <Feather name="credit-card" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="profil"
         options={{
-          title: 'Profil',
+          title: t('tabs.profile'),
           tabBarIcon: ({ color }) => <Feather name="user" size={22} color={color} />,
         }}
       />

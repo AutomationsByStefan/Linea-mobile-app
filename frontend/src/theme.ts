@@ -1,3 +1,5 @@
+import i18n from './i18n';
+
 export const Colors = {
   background: '#FDFCF8',
   primary: '#A68B5B',
@@ -60,6 +62,18 @@ export const CardStyle = {
 
 export const BosnianDays = ['Nedjelja', 'Ponedjeljak', 'Utorak', 'Srijeda', 'Četvrtak', 'Petak', 'Subota'];
 export const BosnianDaysShort = ['NED', 'PON', 'UTO', 'SRI', 'ČET', 'PET', 'SUB'];
+export const EnglishDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+export const EnglishDaysShort = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+/** Weekday names in the currently active app language. */
+export function getDayNames(): string[] {
+  return i18n.language === 'en' ? EnglishDays : BosnianDays;
+}
+
+/** Short weekday labels in the currently active app language. */
+export function getDayNamesShort(): string[] {
+  return i18n.language === 'en' ? EnglishDaysShort : BosnianDaysShort;
+}
 
 /**
  * Parse a date string in either YYYY-MM-DD (ISO, optionally with a time part)
@@ -127,5 +141,5 @@ export function daysUntil(dateStr: string): number | null {
 export function formatDateWithDay(dateStr: string): string {
   const d = parseDate(dateStr);
   if (!d) return dateStr;
-  return `${BosnianDays[d.getDay()]}, ${formatDD(dateStr)}`;
+  return `${getDayNames()[d.getDay()]}, ${formatDD(dateStr)}`;
 }

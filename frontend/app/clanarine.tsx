@@ -6,6 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { Colors, Fonts, Sizes, CardStyle, formatDD, daysUntil } from '../src/theme';
 import { membershipsAPI } from '../src/api';
 import { useAuth } from '../src/context/AuthContext';
@@ -14,6 +15,7 @@ export default function ClanarineScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const minusTrainings = Number(user?.minus_treninzi ?? 0) || 0;
 
   const [data, setData] = useState<any>({ active: [], past: [] });
@@ -60,21 +62,21 @@ export default function ClanarineScreen() {
           <Text style={styles.cardName}>{name}</Text>
           <View style={[styles.statusBadge, isPast ? styles.statusExpired : styles.statusActive]}>
             <Text style={[styles.statusText, isPast ? styles.statusExpiredText : styles.statusActiveText]}>
-              {isPast ? 'Iskorištena' : 'Aktivna'}
+              {isPast ? t('memberships.used') : t('home.active')}
             </Text>
           </View>
         </View>
         <Text style={styles.cardTerms}>
-          {isPast ? 'Iskorišteno' : 'Preostalo'}: <Text style={styles.goldText}>{remaining}</Text>/{total} termina
+          {isPast ? t('memberships.usedLabel') : t('home.remainingSlots')}: <Text style={styles.goldText}>{remaining}</Text>/{total} {t('memberships.slots')}
         </Text>
         <View style={styles.datesWrap}>
-          {start && <Text style={styles.cardDate}>Početak paketa: {formatDD(start)}</Text>}
+          {start && <Text style={styles.cardDate}>{t('home.packageStart')}: {formatDD(start)}</Text>}
           {expiry && (isExpired ? (
-            <Text style={styles.cardExpiredText}>Paket je istekao {formatDD(expiry)}</Text>
+            <Text style={styles.cardExpiredText}>{t('home.packageExpired', { date: formatDD(expiry) })}</Text>
           ) : (
             <>
-              <Text style={styles.cardDate}>Paket važi do: {formatDD(expiry)}</Text>
-              {left != null && <Text style={styles.cardDaysLeft}>Preostalo {left} dana</Text>}
+              <Text style={styles.cardDate}>{t('home.packageValidUntil')}: {formatDD(expiry)}</Text>
+              {left != null && <Text style={styles.cardDaysLeft}>{t('home.daysRemaining', { count: left })}</Text>}
             </>
           ))}
         </View>
@@ -93,7 +95,7 @@ export default function ClanarineScreen() {
         <TouchableOpacity testID="clanarine-back-btn" onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color={Colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Tvoje članarine</Text>
+        <Text style={styles.headerTitle}>{t('memberships.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -106,7 +108,7 @@ export default function ClanarineScreen() {
           <View style={styles.minusBanner} testID="minus-banner">
             <Feather name="alert-triangle" size={20} color={Colors.danger} />
             <Text style={styles.minusBannerText}>
-              Imate {minusTrainings} trening(a) u minusu. Potrebna je uplata.
+              {t('home.minusTrainings', { count: minusTrainings })}
             </Text>
           </View>
         )}
@@ -116,7 +118,7 @@ export default function ClanarineScreen() {
           <>
             {data.active.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Aktivne članarine</Text>
+                <Text style={styles.sectionTitle}>{t('home.activeMemberships')}</Text>
                 {data.active.map((m: any, i: number) => (
                   <MembershipCard key={m.id || m._id || i} m={m} isPast={false} />
                 ))}
@@ -125,7 +127,7 @@ export default function ClanarineScreen() {
 
             {data.past.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Prethodne članarine</Text>
+                <Text style={styles.sectionTitle}>{t('memberships.previous')}</Text>
                 {data.past.map((m: any, i: number) => (
                   <MembershipCard key={m.id || m._id || i} m={m} isPast={true} />
                 ))}
@@ -135,7 +137,7 @@ export default function ClanarineScreen() {
             {data.active.length === 0 && data.past.length === 0 && (
               <View style={styles.emptyWrap}>
                 <Feather name="credit-card" size={40} color={Colors.muted} />
-                <Text style={styles.emptyText}>Nemate članarina</Text>
+                <Text style={styles.emptyText}>{t('memberships.noMemberships')}</Text>
               </View>
             )}
           </>
