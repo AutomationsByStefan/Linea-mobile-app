@@ -171,7 +171,9 @@ function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) 
               </View>
               <Text style={s.userSub}>{u.naziv_paketa || '-'}</Text>
               <Text style={[s.userSub, { color: Colors.primary, fontFamily: Fonts.bodySemiBold }]}>
-                Preostalo: {u.preostali_termini || 0}/{u.ukupni_termini || 0} termina
+                {u.neograniceni
+                  ? 'Neograničen paket'
+                  : `Preostalo: ${u.preostali_termini || 0}/${u.ukupni_termini || 0} termina`}
               </Text>
               {u.datum_isteka && <Text style={s.userSub}>Ističe: {formatDD(u.datum_isteka)}</Text>}
             </View>
@@ -391,7 +393,7 @@ function DashboardSection({ onNavigate }: { onNavigate: (s: Section) => void }) 
                   <View style={s.expandedStats}>
                     <View style={s.expandedStat}><Text style={s.expandedLabel}>Registracija</Text><Text style={s.expandedValue}>{formatDD(usr.created_at)}</Text></View>
                     <View style={s.expandedStat}><Text style={s.expandedLabel}>Paket</Text><Text style={s.expandedValue}>{usr.naziv_paketa || '-'}</Text></View>
-                    <View style={s.expandedStat}><Text style={s.expandedLabel}>Termini</Text><Text style={s.expandedValue}>{usr.preostali_termini || 0}/{usr.ukupni_termini || 0}</Text></View>
+                    <View style={s.expandedStat}><Text style={s.expandedLabel}>Termini</Text><Text style={s.expandedValue}>{usr.neograniceni ? '∞' : `${usr.preostali_termini || 0}/${usr.ukupni_termini || 0}`}</Text></View>
                   </View>
                 </View>
               )}
@@ -1491,7 +1493,7 @@ function UsersSection() {
                   {u.naziv_paketa && u.naziv_paketa !== '-' ? (
                     <>
                       <Text style={s.userPkg}>{u.naziv_paketa}</Text>
-                      <Text style={s.userSessions}>{u.preostali_termini || 0}/{u.ukupni_termini || 0}</Text>
+                      <Text style={s.userSessions}>{u.neograniceni ? '∞' : `${u.preostali_termini || 0}/${u.ukupni_termini || 0}`}</Text>
                     </>
                   ) : <Text style={s.userSessions}>0/0</Text>}
                 </View>

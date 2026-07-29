@@ -26,8 +26,12 @@ export default function ClanarineScreen() {
     try {
       const res = await membershipsAPI.getAll();
       if (Array.isArray(res)) {
-        const active = res.filter((m: any) => m.tip === 'aktivna' && (m.preostali_termini || 0) > 0);
-        const past = res.filter((m: any) => m.tip !== 'aktivna' || (m.preostali_termini || 0) === 0);
+        // Neograničena članarina je uvijek na 0 termina — aktivna je dok traje rok,
+        // pa je ne smije razvrstati po broju preostalih termina.
+        const isActive = (m: any) =>
+          m.tip === 'aktivna' && (m.neograniceni || (m.preostali_termini || 0) > 0);
+        const active = res.filter(isActive);
+        const past = res.filter((m: any) => !isActive(m));
         setData({ active, past });
       } else {
         setData({ active: res.active || res.aktivne || [], past: res.past || res.prethodne || [] });
@@ -66,9 +70,15 @@ export default function ClanarineScreen() {
             </Text>
           </View>
         </View>
-        <Text style={styles.cardTerms}>
-          {isPast ? t('memberships.usedLabel') : t('home.remainingSlots')}: <Text style={styles.goldText}>{remaining}</Text>/{total} {t('memberships.slots')}
-        </Text>
+        {m.neograniceni ? (
+          <Text style={styles.cardTerms}>
+            {t('memberships.unlimitedUsed', { count: m.iskoristeni_termini ?? 0 })}
+          </Text>
+        ) : (
+          <Text style={styles.cardTerms}>
+            {isPast ? t('memberships.usedLabel') : t('home.remainingSlots')}: <Text style={styles.goldText}>{remaining}</Text>/{total} {t('memberships.slots')}
+          </Text>
+        )}
         <View style={styles.datesWrap}>
           {start && <Text style={styles.cardDate}>{t('home.packageStart')}: {formatDD(start)}</Text>}
           {expiry && (isExpired ? (

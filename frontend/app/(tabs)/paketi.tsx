@@ -122,6 +122,7 @@ export default function PaketiScreen() {
           const price = pkg.cijena || pkg.price;
           const sessions = pkg.termini || pkg.broj_termina || pkg.sessions;
           const pkgId = pkg.id || pkg._id || pkg.package_id;
+          const unlimited = !!pkg.neograniceni;
 
           return (
             <View
@@ -141,8 +142,12 @@ export default function PaketiScreen() {
                   <Text style={styles.pkgName}>{name}</Text>
                   <Text style={styles.pkgDesc}>{t('packages.smallGroup')}</Text>
                   <View style={styles.sessionsRow}>
-                    <Feather name="check" size={14} color={Colors.primary} />
-                    <Text style={styles.sessionsText}>{t('packages.sessionsPerMonth', { count: sessions })}</Text>
+                    <Feather name={unlimited ? 'repeat' : 'check'} size={14} color={Colors.primary} />
+                    <Text style={styles.sessionsText}>
+                      {unlimited
+                        ? t('packages.unlimitedSessions')
+                        : t('packages.sessionsPerMonth', { count: sessions })}
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.cardRight}>
@@ -188,8 +193,15 @@ export default function PaketiScreen() {
               <Text style={styles.modalPkgName}>{confirmPkg?.naziv || confirmPkg?.name}</Text>
               <Text style={styles.modalPkgPrice}>{confirmPkg?.cijena || confirmPkg?.price} KM</Text>
               <Text style={styles.modalPkgSessions}>
-                {t('packages.sessionsPerMonth', { count: confirmPkg?.broj_termina || confirmPkg?.sessions })}
+                {confirmPkg?.neograniceni
+                  ? t('packages.unlimitedSessions')
+                  : t('packages.sessionsPerMonth', { count: confirmPkg?.broj_termina || confirmPkg?.sessions })}
               </Text>
+              {confirmPkg?.neograniceni && (
+                <Text style={styles.modalPkgUnlimitedNote}>
+                  {t('packages.unlimitedNote', { days: confirmPkg?.trajanje_dana || 35 })}
+                </Text>
+              )}
             </View>
             <Text style={styles.modalNote}>
               {t('packages.confirmNote')}
@@ -310,6 +322,13 @@ const styles = StyleSheet.create({
   modalPkgName: { fontFamily: Fonts.heading, fontSize: 18, color: Colors.foreground, marginBottom: 4 },
   modalPkgPrice: { fontFamily: Fonts.bodyBold, fontSize: Sizes.h2, color: Colors.primary, marginBottom: 4 },
   modalPkgSessions: { fontFamily: Fonts.body, fontSize: Sizes.small, color: Colors.muted },
+  modalPkgUnlimitedNote: {
+    fontFamily: Fonts.body,
+    fontSize: Sizes.tiny,
+    color: Colors.primary,
+    textAlign: 'center',
+    marginTop: 4,
+  },
   modalNote: {
     fontFamily: Fonts.body,
     fontSize: Sizes.tiny,

@@ -231,18 +231,27 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.membershipTerms}>
-                {t('home.remainingSlots')}: <Text style={styles.goldText}>
-                  {activeMembership.preostali_termini ?? activeMembership.remaining ?? 0}
+              {activeMembership.neograniceni ? (
+                // Neograničen paket nema brojač termina — traka bi uvijek bila 0/0.
+                <Text style={styles.membershipTerms}>
+                  {t('home.remainingSlots')}: <Text style={styles.goldText}>{t('home.unlimited')}</Text>
                 </Text>
-                /{activeMembership.ukupni_termini ?? activeMembership.total ?? 0}
-              </Text>
-              <View style={styles.progressBg}>
-                <View style={[styles.progressFill, {
-                  width: `${Math.min(100, ((activeMembership.preostali_termini ?? activeMembership.remaining ?? 0) /
-                    (activeMembership.ukupni_termini ?? activeMembership.total ?? 1)) * 100)}%`
-                }]} />
-              </View>
+              ) : (
+                <>
+                  <Text style={styles.membershipTerms}>
+                    {t('home.remainingSlots')}: <Text style={styles.goldText}>
+                      {activeMembership.preostali_termini ?? activeMembership.remaining ?? 0}
+                    </Text>
+                    /{activeMembership.ukupni_termini ?? activeMembership.total ?? 0}
+                  </Text>
+                  <View style={styles.progressBg}>
+                    <View style={[styles.progressFill, {
+                      width: `${Math.min(100, ((activeMembership.preostali_termini ?? activeMembership.remaining ?? 0) /
+                        (activeMembership.ukupni_termini ?? activeMembership.total ?? 1)) * 100)}%`
+                    }]} />
+                  </View>
+                </>
+              )}
               {(() => {
                 const start = activeMembership.datum_pocetka || activeMembership.start_date;
                 const expiry = activeMembership.datum_isteka || activeMembership.expiry_date || activeMembership.expiry;

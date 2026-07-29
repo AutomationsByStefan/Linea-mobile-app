@@ -107,7 +107,8 @@ export default function TerminiScreen() {
   const remainingSessions = activeMembership
     ? (activeMembership.preostali_termini ?? activeMembership.remaining ?? 0)
     : 0;
-  const noSessions = remainingSessions <= 0;
+  // Neograničen paket je uvijek na 0 termina, ali ne ide u minus dok traje.
+  const noSessions = !activeMembership?.neograniceni && remainingSessions <= 0;
 
   const handleBook = async (slot: any) => {
     setBooking(true);

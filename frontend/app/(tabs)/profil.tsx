@@ -134,6 +134,9 @@ export default function ProfilScreen() {
 
   const remaining = stats?.preostali_termini ?? stats?.remaining ?? 0;
   const total = stats?.ukupni_termini ?? stats?.total ?? 0;
+  // Neograničen paket nema ukupan broj termina (total = 0), pa ga uslovi
+  // bazirani na `total > 0` inače potpuno sakriju.
+  const unlimited = !!stats?.neograniceni;
   const completed = stats?.zavrseni_treninzi ?? stats?.completed ?? 0;
   const weeks = stats?.sedmice_aktivnosti ?? stats?.weeks ?? 0;
 
@@ -161,10 +164,17 @@ export default function ProfilScreen() {
         </View>
 
         {/* Membership Status */}
-        {stats && (total > 0 || stats.pending_paket || stats.ima_aktivnu_clanarinu) && (
+        {stats && (unlimited || total > 0 || stats.pending_paket || stats.ima_aktivnu_clanarinu) && (
           <View style={styles.card} testID="membership-status-card">
             <Text style={styles.cardTitle}>{t('profile.membershipStatus')}</Text>
-            {total > 0 ? (
+            {unlimited ? (
+              <View style={styles.statusRow}>
+                <Feather name="repeat" size={18} color={Colors.primary} />
+                <Text style={styles.statusText}>
+                  {t('home.remainingSlots')}: <Text style={styles.goldBig}>{t('home.unlimited')}</Text>
+                </Text>
+              </View>
+            ) : total > 0 ? (
               <>
                 <View style={styles.statusRow}>
                   <Feather name="trending-up" size={18} color={Colors.primary} />
